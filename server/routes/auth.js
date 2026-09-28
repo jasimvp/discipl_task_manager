@@ -41,9 +41,7 @@ router.post('/register', (req, res) => {
   ];
   const avatar = avatarPool[Math.floor(Math.random() * avatarPool.length)];
 
-  // If first user, automatically Founder
-  const founderCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'founder'").get().count;
-  const targetRole = founderCount === 0 ? 'founder' : (role || 'employee');
+  const targetRole = role || 'employee';
   const initialStatus = targetRole === 'founder' ? 'approved' : 'pending';
 
   const stmt = db.prepare(`
