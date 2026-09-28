@@ -90,7 +90,7 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-xs font-medium text-indigo-200 mb-3">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
               <span>
-                {isFounder ? 'Deciple Executive Command Center' : isLead ? 'Deciple Team Leader Command Center' : 'Deciple Workspace'}
+                {isFounder ? 'Discipl Executive Command Center' : isLead ? 'Discipl Team Leader Command Center' : 'Discipl Workspace'}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -291,7 +291,7 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
               {employeeStats.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="py-12 text-center text-slate-400 text-xs">
-                    No team members registered yet. Invite your colleagues to register for Deciple!
+                    No team members registered yet. Invite your colleagues to register for Discipl!
                   </td>
                 </tr>
               ) : (

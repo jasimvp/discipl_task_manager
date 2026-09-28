@@ -97,17 +97,17 @@ export default function Navbar({ activeTab, setActiveTab }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
-          {/* Deciple Brand */}
+          {/* Discipl Brand */}
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-100">
               <CheckSquare className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xl text-slate-900 tracking-tight">Deciple</span>
+                <span className="font-extrabold text-xl text-slate-900 tracking-tight">Discipl</span>
                 <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200/70 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">Enterprise</span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">Deciple Task & Team Workspace</p>
+              <p className="text-[11px] text-slate-400 hidden sm:block">Discipl Task & Team Workspace</p>
             </div>
           </div>
 

@@ -1,13 +1,13 @@
-# Deciple - Enterprise Task & Team Management System
+# Discipl - Enterprise Task & Team Management System
 
-A production-ready, full-stack Task Management & Team Collaboration application built specifically for **Deciple**.
+A production-ready, full-stack Task Management & Team Collaboration application built specifically for **Discipl**.
 
 ---
 
 ## 🌟 Key Features
 
 1. **Authentication & Self-Registration (രജിസ്ട്രേഷൻ)**:
-   - Initial workspace setup: The first registration automatically creates the **Founder & Admin** account for Deciple.
+   - Initial workspace setup: The first registration automatically creates the **Founder & Admin** account for Discipl.
    - Team members and employees register with their name, work email, and department.
    - Employees log in immediately upon registration without delays.
 
@@ -57,7 +57,7 @@ npm start
 1. Push your code to a GitHub repository:
    ```bash
    git add .
-   git commit -m "Deciple production release"
+   git commit -m "Discipl production release"
    git push origin main
    ```
 2. In [Render.com](https://render.com), click **New Web Service** and select your GitHub repository.
@@ -80,7 +80,7 @@ Run using **PM2** on an Ubuntu server:
 ```bash
 npm install && npm run build
 npm install -g pm2
-pm2 start server/index.js --name "deciple-taskflow"
+pm2 start server/index.js --name "discipl-taskflow"
 pm2 save
 ```
 Configure Nginx with SSL (Certbot) pointing to port 5000 with WebSocket upgrade support.

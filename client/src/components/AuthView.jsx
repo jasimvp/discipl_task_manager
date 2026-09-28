@@ -85,7 +85,7 @@ export default function AuthView() {
         department: regDepartment,
         title: regTitle.trim() || (needsFounderSetup || regRole === 'founder' ? 'Founder & CEO' : regRole === 'team_lead' ? 'Team Lead' : 'Employee'),
       });
-      setSuccessNotice('Account created successfully! Entering Deciple workspace...');
+      setSuccessNotice('Account created successfully! Entering Discipl workspace...');
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -106,11 +106,11 @@ export default function AuthView() {
           <CheckSquare className="w-8 h-8 stroke-[2.2]" />
         </div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center justify-center gap-2">
-          <span>Deciple</span>
+          <span>Discipl</span>
           <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Workspace</span>
         </h1>
         <p className="mt-1 text-xs text-slate-400">
-          Deciple Enterprise Task Management & Team Collaboration
+          Discipl Enterprise Task Management & Team Collaboration
         </p>
       </div>
 
@@ -124,7 +124,7 @@ export default function AuthView() {
               <Sparkles className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
               <div>
                 <span className="font-bold block">Initial Workspace Setup</span>
-                Register your account below to establish yourself as the <strong>Founder & Admin</strong> of Deciple.
+                Register your account below to establish yourself as the <strong>Founder & Admin</strong> of Discipl.
               </div>
             </div>
           )}
@@ -178,7 +178,7 @@ export default function AuthView() {
                   <input
                     type="email"
                     required
-                    placeholder="name@deciple.com"
+                    placeholder="name@discipl.com"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-hidden"
@@ -208,7 +208,7 @@ export default function AuthView() {
                 disabled={loading}
                 className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50"
               >
-                {loading ? 'Verifying...' : 'Sign In to Deciple'}
+                {loading ? 'Verifying...' : 'Sign In to Discipl'}
               </button>
 
               <div className="text-center pt-2">
@@ -253,7 +253,7 @@ export default function AuthView() {
                   <input
                     type="email"
                     required
-                    placeholder="rahul@deciple.com"
+                    placeholder="rahul@discipl.com"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 outline-hidden"
@@ -309,7 +309,7 @@ export default function AuthView() {
               ) : (
                 <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs font-semibold flex items-center gap-2">
                   <Crown className="w-4 h-4 text-purple-600" />
-                  <span>Registering as Founder & Admin of Deciple</span>
+                  <span>Registering as Founder & Admin of Discipl</span>
                 </div>
               )}
 

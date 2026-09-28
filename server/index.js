@@ -70,5 +70,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`🚀 Deciple Task Manager Production Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Discipl Task Manager Production Server running on http://localhost:${PORT}`);
 });

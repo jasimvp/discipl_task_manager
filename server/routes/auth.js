@@ -102,8 +102,8 @@ router.post('/register', (req, res) => {
     token,
     user: newUser,
     message: initialStatus === 'pending'
-      ? 'Welcome to Deciple! You are logged in. Your company verification request has been sent to the Founder.'
-      : 'Welcome to Deciple! Founder account created successfully.',
+      ? 'Welcome to Discipl! You are logged in. Your company verification request has been sent to the Founder.'
+      : 'Welcome to Discipl! Founder account created successfully.',
   });
 });
 
@@ -205,7 +205,7 @@ router.post('/access-requests/:id/approve', authMiddleware, requireRoles('founde
   try {
     db.prepare(`
       INSERT INTO notifications (user_id, title, message, type)
-      VALUES (?, 'Deciple Company Access Verified', 'The Founder has verified your membership and granted full access!', 'access_approved')
+      VALUES (?, 'Discipl Company Access Verified', 'The Founder has verified your membership and granted full access!', 'access_approved')
     `).run(userId);
   } catch (err) {
     console.error(err);

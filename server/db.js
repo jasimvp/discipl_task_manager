@@ -94,7 +94,7 @@ function initDb() {
     );
   `);
 
-  // Seed default Deciple company teams if empty (no users seeded - fully dynamic!)
+  // Seed default Discipl company teams if empty (no users seeded - fully dynamic!)
   const teamCount = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
   if (teamCount === 0) {
     const insertTeam = db.prepare('INSERT INTO teams (name, description) VALUES (?, ?)');
@@ -102,7 +102,7 @@ function initDb() {
     insertTeam.run('Product & Design', 'UI/UX design, product strategy, user experience and wireframing');
     insertTeam.run('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy');
     insertTeam.run('Operations & Management', 'Business operations, project delivery, and administration');
-    console.log('✅ Deciple core departments initialized.');
+    console.log('✅ Discipl core departments initialized.');
   }
 }
 
