@@ -14,13 +14,14 @@ import {
   LogOut,
   Briefcase,
   Menu,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { api } from '../services/api';
 import DisciplLogo from './DisciplLogo';
 import UserAvatar from './UserAvatar';
 
-export default function Navbar({ activeTab, setActiveTab }) {
+export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }) {
   const { user, logout, socket } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -213,8 +214,34 @@ export default function Navbar({ activeTab, setActiveTab }) {
           </nav>
 
           {/* User Controls & Profile */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             
+            {/* Quick Universal Search (Command Palette) */}
+            {onOpenCommandPalette && (
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenCommandPalette}
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs transition-all shadow-2xs group"
+                  title="Search deliverables, teammates... (Ctrl + K)"
+                >
+                  <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                  <span className="text-[11px] font-medium">Search...</span>
+                  <kbd className="px-1.5 py-0.2 bg-white text-[10px] font-bold text-slate-400 border border-slate-200 rounded group-hover:border-slate-300">
+                    ⌘K
+                  </kbd>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenCommandPalette}
+                  className="sm:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                  title="Quick Search"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+              </>
+            )}
+
             {/* Notification Bell */}
             <div className="relative">
               <button

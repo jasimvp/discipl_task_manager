@@ -17,7 +17,8 @@ import {
   ShieldCheck,
   Check,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Link2
 } from 'lucide-react';
 import DisciplLogo from './DisciplLogo';
 import UserAvatar from './UserAvatar';
@@ -273,11 +274,15 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
               <div className="divide-y divide-slate-100">
                 {myTasks.map((t) => {
                   const isRejected = t.rejection_status === 'requested';
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const isOverdue = t.due_date && t.due_date < todayStr && t.status !== 'completed';
+                  const isDueToday = t.due_date && t.due_date === todayStr && t.status !== 'completed';
+
                   return (
                     <div key={t.id} className="p-6 hover:bg-slate-50/70 transition-colors space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                               t.priority === 'urgent'
                                 ? 'bg-rose-100 text-rose-700'
@@ -289,9 +294,29 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                             </span>
                             <span className="text-xs font-semibold text-slate-400">Task #{t.id}</span>
                             {t.due_date && (
-                              <span className="text-xs text-slate-500 flex items-center gap-1">
+                              <span className={`text-xs flex items-center gap-1 ${
+                                isOverdue ? 'text-rose-600 font-bold' : isDueToday ? 'text-amber-700 font-bold' : 'text-slate-500'
+                              }`}>
                                 <Calendar className="w-3 h-3 text-slate-400" />
                                 Due: {t.due_date}
+                              </span>
+                            )}
+                            {isOverdue && (
+                              <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-rose-200 animate-pulse">
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                Overdue
+                              </span>
+                            )}
+                            {isDueToday && (
+                              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                Due Today
+                              </span>
+                            )}
+                            {t.deliverable_url && (
+                              <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200">
+                                <Link2 className="w-3 h-3 text-indigo-500" />
+                                Deliverable Attached
                               </span>
                             )}
                           </div>

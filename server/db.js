@@ -92,7 +92,26 @@ function initDb() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      deliverable_url TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
+
+  // Safe migrations for existing database
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN deliverable_url TEXT');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN deliverable_notes TEXT');
+  } catch (e) {}
 
   // Seed default Discipl company teams if empty (no users seeded - fully dynamic!)
   const teamCount = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;

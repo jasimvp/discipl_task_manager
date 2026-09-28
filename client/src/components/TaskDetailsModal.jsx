@@ -12,12 +12,16 @@ import {
   ShieldAlert, 
   Send,
   Trash2,
-  Check
+  Check,
+  ExternalLink,
+  Link2,
+  Paperclip,
+  MessageSquare
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
 export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdated }) {
-  const { user, availableUsers } = useAuth();
+  const { user, availableUsers, socket } = useAuth();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,6 +42,19 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
   const [currentProgress, setCurrentProgress] = useState(0);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // Deliverable / Proof of Work state (Feature 2)
+  const [isEditingDeliverable, setIsEditingDeliverable] = useState(false);
+  const [deliverableInputUrl, setDeliverableInputUrl] = useState('');
+  const [deliverableInputNotes, setDeliverableInputNotes] = useState('');
+  const [savingDeliverable, setSavingDeliverable] = useState(false);
+
+  // Task Discussion & Comments state (Feature 1)
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentDeliverableUrl, setCommentDeliverableUrl] = useState('');
+  const [showAttachDeliverableInComment, setShowAttachDeliverableInComment] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+
   const fetchTaskDetails = async () => {
     if (!taskId) return;
     try {
@@ -46,6 +63,9 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
       setTask(data);
       setCurrentStatus(data.status);
       setCurrentProgress(data.progress_pct || 0);
+      setComments(data.comments || []);
+      setDeliverableInputUrl(data.deliverable_url || '');
+      setDeliverableInputNotes(data.deliverable_notes || '');
     } catch (e) {
       setError(e.message || 'Failed to load task details');
     } finally {
@@ -58,12 +78,35 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
       fetchTaskDetails();
       setShowRejectForm(false);
       setShowReassignForm(false);
+      setIsEditingDeliverable(false);
+      setCommentText('');
+      setCommentDeliverableUrl('');
+      setShowAttachDeliverableInComment(false);
       setRejectionReason('');
       setNewAssigneeId('');
       setReassignNote('');
       setError('');
     }
   }, [isOpen, taskId]);
+
+  // Real-time comment updates via Socket.IO
+  useEffect(() => {
+    if (!socket || !taskId) return;
+
+    const handleCommentAdded = (payload) => {
+      if (Number(payload.taskId) === Number(taskId) && payload.comment) {
+        setComments((prev) => {
+          if (prev.some((c) => c.id === payload.comment.id)) return prev;
+          return [...prev, payload.comment];
+        });
+      }
+    };
+
+    socket.on('task_comment_added', handleCommentAdded);
+    return () => {
+      socket.off('task_comment_added', handleCommentAdded);
+    };
+  }, [socket, taskId]);
 
   if (!isOpen) return null;
 
@@ -163,6 +206,63 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
       setError(err.message || 'Failed to delete task');
     }
   };
+
+  // Handle saving deliverable link
+  const handleSaveDeliverable = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setSavingDeliverable(true);
+      setError('');
+      await api.updateTask(taskId, {
+        deliverable_url: deliverableInputUrl.trim() || null,
+        deliverable_notes: deliverableInputNotes.trim() || null,
+      });
+      await fetchTaskDetails();
+      setIsEditingDeliverable(false);
+      if (onTaskUpdated) onTaskUpdated();
+    } catch (err) {
+      setError(err.message || 'Failed to update deliverable');
+    } finally {
+      setSavingDeliverable(false);
+    }
+  };
+
+  // Handle posting a comment
+  const handlePostComment = async (e) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+
+    try {
+      setSubmittingComment(true);
+      setError('');
+      const res = await api.addTaskComment(taskId, {
+        content: commentText.trim(),
+        deliverable_url: commentDeliverableUrl.trim() || undefined,
+      });
+      if (res.comment) {
+        setComments((prev) => {
+          if (prev.some((c) => c.id === res.comment.id)) return prev;
+          return [...prev, res.comment];
+        });
+      }
+      setCommentText('');
+      setCommentDeliverableUrl('');
+      setShowAttachDeliverableInComment(false);
+      if (commentDeliverableUrl.trim()) {
+        fetchTaskDetails();
+      }
+      if (onTaskUpdated) onTaskUpdated();
+    } catch (err) {
+      setError(err.message || 'Failed to post comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const isCompleted = currentStatus === 'completed';
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isOverdue = task?.due_date && task.due_date < todayStr && !isCompleted;
+  const isDueToday = task?.due_date && task.due_date === todayStr && !isCompleted;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -384,11 +484,134 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
 
             <div>
               <span className="text-slate-400 block text-[11px] mb-1">Due Date</span>
-              <div className="flex items-center gap-1.5 font-medium text-slate-700">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>{task?.due_date || 'No deadline'}</span>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{task?.due_date || 'No deadline'}</span>
+                </div>
+                {isOverdue && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full w-fit animate-pulse">
+                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                    Overdue
+                  </span>
+                )}
+                {isDueToday && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full w-fit">
+                    <Clock className="w-3 h-3 text-amber-600" />
+                    Due Today
+                  </span>
+                )}
               </div>
             </div>
+          </div>
+
+          {/* Deliverable / Proof of Work (Feature 2) */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Deliverable / Proof of Work
+                </span>
+              </div>
+              {task?.deliverable_url && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDeliverable(!isEditingDeliverable)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                >
+                  {isEditingDeliverable ? 'Cancel' : 'Edit Link'}
+                </button>
+              )}
+            </div>
+
+            {task?.deliverable_url && !isEditingDeliverable ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-100">
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={task.deliverable_url.startsWith('http') ? task.deliverable_url : `https://${task.deliverable_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-indigo-700 hover:underline text-xs flex items-center gap-1.5 truncate"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{task.deliverable_url}</span>
+                  </a>
+                  {task.deliverable_notes && (
+                    <p className="text-[11px] text-slate-600 mt-1">{task.deliverable_notes}</p>
+                  )}
+                </div>
+                <a
+                  href={task.deliverable_url.startsWith('http') ? task.deliverable_url : `https://${task.deliverable_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 shrink-0 transition-colors shadow-xs"
+                >
+                  <span>Verify Work</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            ) : !task?.deliverable_url && !isEditingDeliverable ? (
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Link2 className="w-4 h-4 text-slate-400" />
+                  <span>No deliverable / proof link attached yet.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDeliverable(true)}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-colors"
+                >
+                  + Attach Link (PR / Figma / Doc)
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveDeliverable} className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">
+                    {task?.deliverable_url ? 'Update Deliverable Link' : 'Attach Deliverable Link'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDeliverable(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://github.com/... or Figma or Google Doc link"
+                  value={deliverableInputUrl}
+                  onChange={(e) => setDeliverableInputUrl(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:border-indigo-500 outline-hidden"
+                />
+                <input
+                  type="text"
+                  placeholder="Optional notes or instructions (e.g. PR merged, Figma frame 3)..."
+                  value={deliverableInputNotes}
+                  onChange={(e) => setDeliverableInputNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:border-indigo-500 outline-hidden"
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDeliverable(false)}
+                    className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingDeliverable}
+                    className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-xs"
+                  >
+                    {savingDeliverable ? 'Saving...' : 'Save Deliverable'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* Status & Progress Management */}
@@ -453,6 +676,122 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 className="w-full accent-indigo-600 cursor-pointer"
               />
             </div>
+          </div>
+
+          {/* Task Discussion & Comments Feed (Feature 1) */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Discussion & Updates ({comments.length})
+                </span>
+              </div>
+            </div>
+
+            {/* Comments List */}
+            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+              {comments.length === 0 ? (
+                <div className="text-center py-5 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  No comments yet. Start the conversation or post progress updates below.
+                </div>
+              ) : (
+                comments.map((c) => (
+                  <div key={c.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <UserAvatar
+                          name={c.user_name}
+                          avatar={c.user_avatar}
+                          role={c.user_role}
+                          size="xs"
+                        />
+                        <span className="font-bold text-slate-800 text-xs">{c.user_name}</span>
+                        <span className="text-[10px] text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200 font-medium">
+                          {c.user_role === 'founder' ? '👑 Founder' : c.user_role === 'team_lead' ? '🛡️ Lead' : '💼 Employee'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(c.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 pl-7 whitespace-pre-wrap">{c.content}</p>
+                    {c.deliverable_url && (
+                      <div className="pl-7 pt-1">
+                        <a
+                          href={c.deliverable_url.startsWith('http') ? c.deliverable_url : `https://${c.deliverable_url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors"
+                        >
+                          <Link2 className="w-3 h-3 text-indigo-600" />
+                          <span className="truncate max-w-xs">{c.deliverable_url}</span>
+                          <ExternalLink className="w-2.5 h-2.5 text-indigo-500" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Post Comment Box */}
+            <form onSubmit={handlePostComment} className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex items-start gap-2">
+                <UserAvatar
+                  name={user?.name}
+                  avatar={user?.avatar}
+                  role={user?.role}
+                  size="xs"
+                  className="mt-1"
+                />
+                <div className="flex-1 space-y-2">
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder="Write a message, update, or question on this deliverable..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs focus:bg-white focus:border-indigo-500 outline-hidden resize-none"
+                  />
+
+                  {showAttachDeliverableInComment && (
+                    <div className="flex items-center gap-2">
+                      <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <input
+                        type="url"
+                        placeholder="Paste deliverable URL (PR, Figma, Doc, Live Link)..."
+                        value={commentDeliverableUrl}
+                        onChange={(e) => setCommentDeliverableUrl(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white outline-hidden focus:border-indigo-500"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachDeliverableInComment(!showAttachDeliverableInComment)}
+                      className={`text-[11px] font-semibold flex items-center gap-1 transition-colors ${
+                        showAttachDeliverableInComment ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span>{showAttachDeliverableInComment ? 'Remove link' : 'Attach link'}</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={submittingComment || !commentText.trim()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>{submittingComment ? 'Sending...' : 'Send'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
           </div>
 
           {/* Activity Log */}

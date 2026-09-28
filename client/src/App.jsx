@@ -10,6 +10,7 @@ import TeamWorkloadView from './components/TeamWorkloadView';
 import AccessRequestsView from './components/AccessRequestsView';
 import TaskModal from './components/TaskModal';
 import TaskDetailsModal from './components/TaskDetailsModal';
+import CommandPalette from './components/CommandPalette';
 
 function MainApp() {
   const { user, loading, socket } = useAuth();
@@ -19,6 +20,19 @@ function MainApp() {
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [chatDirectUserId, setChatDirectUserId] = useState(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // Global Ctrl + K / Cmd + K listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   if (loading) {
     return (
@@ -45,7 +59,11 @@ function MainApp() {
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 font-sans">
       
       {/* Navigation Header */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+      />
 
       {/* Pending Founder Verification Banner if applicable */}
       {user?.status === 'pending' && (
@@ -113,6 +131,15 @@ function MainApp() {
         onTaskUpdated={() => {
           // Socket event triggers update
         }}
+      />
+
+      {/* Command Palette (Ctrl + K Search) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onSelectTask={(id) => setSelectedTaskId(id)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onOpenChatWithUser={handleOpenChatWithUser}
       />
 
     </div>

@@ -172,6 +172,19 @@ export const api = {
     return res.json();
   },
 
+  async addTaskComment(taskId, { content, deliverable_url }) {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/comments`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ content, deliverable_url }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to post comment');
+    }
+    return res.json();
+  },
+
   async requestRejection(id, reason) {
     const res = await fetch(`${API_BASE}/tasks/${id}/reject`, {
       method: 'POST',

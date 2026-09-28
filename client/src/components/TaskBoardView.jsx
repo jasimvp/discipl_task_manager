@@ -13,7 +13,9 @@ import {
   Clock, 
   User,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -29,6 +31,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
   const [search, setSearch] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState('');
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
   const fetchTasks = async () => {
     try {
@@ -100,6 +103,13 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
         return null;
     }
   };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isTaskOverdue = (t) => Boolean(t.due_date && t.due_date < todayStr && t.status !== 'completed');
+  const isTaskDueToday = (t) => Boolean(t.due_date && t.due_date === todayStr && t.status !== 'completed');
+
+  const overdueCount = tasks.filter(isTaskOverdue).length;
+  const displayedTasks = showOverdueOnly ? tasks.filter(isTaskOverdue) : tasks;
 
   return (
     <div className="space-y-6 pb-12">
@@ -191,14 +201,14 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
         </div>
 
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 border-t border-slate-100">
           
           {/* Search */}
-          <div className="relative">
+          <div className="relative sm:col-span-5">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search tasks..."
+              placeholder="Search tasks by title or details..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 outline-hidden"
@@ -206,7 +216,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
           </div>
 
           {/* Priority filter */}
-          <div>
+          <div className="sm:col-span-2">
             <select
               value={selectedPriority}
               onChange={(e) => setSelectedPriority(e.target.value)}
@@ -221,7 +231,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
           </div>
 
           {/* Assignee filter */}
-          <div>
+          <div className="sm:col-span-3">
             <select
               value={selectedAssignee}
               onChange={(e) => setSelectedAssignee(e.target.value)}
@@ -234,6 +244,31 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Overdue Quick Filter Toggle */}
+          <div className="sm:col-span-2">
+            <button
+              type="button"
+              onClick={() => setShowOverdueOnly(!showOverdueOnly)}
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                showOverdueOnly
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                  : overdueCount > 0
+                  ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <AlertTriangle className={`w-3.5 h-3.5 ${showOverdueOnly ? 'text-white' : overdueCount > 0 ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
+              <span>Overdue</span>
+              {overdueCount > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  showOverdueOnly ? 'bg-white text-rose-700' : 'bg-rose-200 text-rose-800'
+                }`}>
+                  {overdueCount}
+                </span>
+              )}
+            </button>
           </div>
 
         </div>
@@ -252,10 +287,10 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                   : 'bg-white text-slate-600 border border-slate-200'
               }`}
             >
-              All Columns ({tasks.length})
+              All Columns ({displayedTasks.length})
             </button>
             {columns.map((c) => {
-              const count = tasks.filter((t) => t.status === c.key).length;
+              const count = displayedTasks.filter((t) => t.status === c.key).length;
               return (
                 <button
                   key={c.key}
@@ -282,7 +317,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
             {columns
               .filter((col) => mobileKanbanCol === 'all' || mobileKanbanCol === col.key)
               .map((col) => {
-                const colTasks = tasks.filter((t) => t.status === col.key);
+                const colTasks = displayedTasks.filter((t) => t.status === col.key);
                 return (
                   <div
                     key={col.key}
@@ -308,6 +343,9 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                   ) : (
                     colTasks.map((t) => {
                       const isRejected = t.rejection_status === 'requested';
+                      const isOverdue = isTaskOverdue(t);
+                      const isDueToday = isTaskDueToday(t);
+
                       return (
                         <div
                           key={t.id}
@@ -315,16 +353,38 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                           className={`bg-white p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-md ${
                             isRejected 
                               ? 'border-amber-400 ring-2 ring-amber-100 shadow-sm' 
+                              : isOverdue
+                              ? 'border-rose-300 hover:border-rose-400 shadow-xs'
                               : 'border-slate-200 hover:border-slate-300 shadow-xs'
                           }`}
                         >
-                          {/* Priority and Reassignment Warning Badge */}
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            {getPriorityBadge(t.priority)}
+                          {/* Priority and Urgency Badges */}
+                          <div className="flex items-center justify-between gap-1 flex-wrap mb-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {getPriorityBadge(t.priority)}
+                              {isOverdue && (
+                                <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-rose-200 animate-pulse">
+                                  <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                  Overdue
+                                </span>
+                              )}
+                              {isDueToday && (
+                                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  Due Today
+                                </span>
+                              )}
+                              {t.deliverable_url && (
+                                <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200" title={t.deliverable_url}>
+                                  <Link2 className="w-3 h-3 text-indigo-500" />
+                                  Proof
+                                </span>
+                              )}
+                            </div>
                             {isRejected && (
                               <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300 animate-pulse">
                                 <ShieldAlert className="w-3 h-3 text-amber-600" />
-                                Reassignment Requested
+                                Reassignment
                               </span>
                             )}
                           </div>
@@ -381,7 +441,13 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                             </div>
 
                             {t.due_date && (
-                              <div className="flex items-center gap-1 text-slate-500">
+                              <div className={`flex items-center gap-1 text-[11px] ${
+                                isOverdue
+                                  ? 'text-rose-600 font-bold'
+                                  : isDueToday
+                                  ? 'text-amber-700 font-bold'
+                                  : 'text-slate-500'
+                              }`}>
                                 <Calendar className="w-3 h-3" />
                                 <span>{new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                               </div>
@@ -406,65 +472,90 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
         <div className="space-y-4">
           {/* Mobile Card View (md:hidden) */}
           <div className="md:hidden space-y-3">
-            {tasks.length === 0 ? (
+            {displayedTasks.length === 0 ? (
               <div className="bg-white p-8 rounded-3xl border border-slate-200 text-center text-xs text-slate-400">
                 No deliverables found matching your criteria.
               </div>
             ) : (
-              tasks.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => onSelectTask(t.id)}
-                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3 active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      {getPriorityBadge(t.priority)}
-                      <span className="text-[10px] text-slate-400">#{t.id}</span>
-                    </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      t.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : t.status === 'in_progress'
-                        ? 'bg-blue-100 text-blue-700'
-                        : t.status === 'review'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {t.status.replace('_', ' ').toUpperCase()}
-                    </span>
-                  </div>
+              displayedTasks.map((t) => {
+                const isOverdue = isTaskOverdue(t);
+                const isDueToday = isTaskDueToday(t);
 
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">{t.title}</h3>
-                    {t.rejection_status === 'requested' && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
-                        <ShieldAlert className="w-3 h-3 text-amber-600" />
-                        Reassignment Requested
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => onSelectTask(t.id)}
+                    className={`bg-white p-4 rounded-2xl border shadow-2xs space-y-3 active:scale-[0.99] transition-all cursor-pointer ${
+                      isOverdue ? 'border-rose-200' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {getPriorityBadge(t.priority)}
+                        <span className="text-[10px] text-slate-400">#{t.id}</span>
+                        {isOverdue && (
+                          <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-rose-200 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" />
+                            Overdue
+                          </span>
+                        )}
+                        {isDueToday && (
+                          <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Due Today
+                          </span>
+                        )}
+                        {t.deliverable_url && (
+                          <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200">
+                            <Link2 className="w-3 h-3 text-indigo-500" />
+                            Proof
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        t.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : t.status === 'in_progress'
+                          ? 'bg-blue-100 text-blue-700'
+                          : t.status === 'review'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {t.status.replace('_', ' ').toUpperCase()}
                       </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <UserAvatar
-                        name={t.assignee_name}
-                        avatar={t.assignee_avatar}
-                        role={t.assignee_role}
-                        size="xs"
-                      />
-                      <span className="font-semibold text-slate-700 text-xs truncate max-w-[120px]">
-                        {t.assignee_name || 'Unassigned'}
-                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-700">{t.progress_pct || 0}%</span>
-                      <span className="text-indigo-600 font-bold text-xs">Details →</span>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{t.title}</h3>
+                      {t.rejection_status === 'requested' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
+                          <ShieldAlert className="w-3 h-3 text-amber-600" />
+                          Reassignment Requested
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-2">
+                        <UserAvatar
+                          name={t.assignee_name}
+                          avatar={t.assignee_avatar}
+                          role={t.assignee_role}
+                          size="xs"
+                        />
+                        <span className="font-semibold text-slate-700 text-xs truncate max-w-[120px]">
+                          {t.assignee_name || 'Unassigned'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-700">{t.progress_pct || 0}%</span>
+                        <span className="text-indigo-600 font-bold text-xs">Details →</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -484,67 +575,100 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {tasks.map((t) => (
-                    <tr
-                      key={t.id}
-                      onClick={() => onSelectTask(t.id)}
-                      className="hover:bg-slate-50 cursor-pointer transition-colors"
-                    >
-                      <td className="py-4 px-6 max-w-xs">
-                        <div>
-                          <span className="font-bold text-slate-900 text-sm block truncate">{t.title}</span>
-                          {t.rejection_status === 'requested' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
-                              <ShieldAlert className="w-3 h-3 text-amber-600" />
-                              Reassignment Requested
+                  {displayedTasks.map((t) => {
+                    const isOverdue = isTaskOverdue(t);
+                    const isDueToday = isTaskDueToday(t);
+
+                    return (
+                      <tr
+                        key={t.id}
+                        onClick={() => onSelectTask(t.id)}
+                        className={`hover:bg-slate-50 cursor-pointer transition-colors ${
+                          isOverdue ? 'bg-rose-50/20' : ''
+                        }`}
+                      >
+                        <td className="py-4 px-6 max-w-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm block truncate">{t.title}</span>
+                              {t.deliverable_url && (
+                                <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.2 rounded-full border border-indigo-200 shrink-0 flex items-center gap-1" title={t.deliverable_url}>
+                                  <Link2 className="w-3 h-3 text-indigo-500" />
+                                  Proof
+                                </span>
+                              )}
+                            </div>
+                            {t.rejection_status === 'requested' && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
+                                <ShieldAlert className="w-3 h-3 text-amber-600" />
+                                Reassignment Requested
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-4">
+                          <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                            t.status === 'completed'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : t.status === 'in_progress'
+                              ? 'bg-blue-100 text-blue-700'
+                              : t.status === 'review'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {t.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </td>
+
+                        <td className="py-4 px-4">{getPriorityBadge(t.priority)}</td>
+
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-2">
+                            <UserAvatar
+                              name={t.assignee_name}
+                              avatar={t.assignee_avatar}
+                              role={t.assignee_role}
+                              size="xs"
+                            />
+                            <span className="font-semibold text-slate-800">{t.assignee_name || 'Unassigned'}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`font-medium ${
+                              isOverdue ? 'text-rose-600 font-bold' : isDueToday ? 'text-amber-700 font-bold' : 'text-slate-600'
+                            }`}>
+                              {t.due_date || 'None'}
                             </span>
-                          )}
-                        </div>
-                      </td>
+                            {isOverdue && (
+                              <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                Overdue
+                              </span>
+                            )}
+                            {isDueToday && (
+                              <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Due Today
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
-                      <td className="py-4 px-4">
-                        <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                          t.status === 'completed'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : t.status === 'in_progress'
-                            ? 'bg-blue-100 text-blue-700'
-                            : t.status === 'review'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {t.status.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="font-bold text-slate-800">{t.progress_pct || 0}%</span>
+                        </td>
 
-                      <td className="py-4 px-4">{getPriorityBadge(t.priority)}</td>
-
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <UserAvatar
-                            name={t.assignee_name}
-                            avatar={t.assignee_avatar}
-                            role={t.assignee_role}
-                            size="xs"
-                          />
-                          <span className="font-semibold text-slate-800">{t.assignee_name || 'Unassigned'}</span>
-                        </div>
-                      </td>
-
-                      <td className="py-4 px-4">
-                        <span className="text-slate-600">{t.due_date || 'None'}</span>
-                      </td>
-
-                      <td className="py-4 px-4 text-center">
-                        <span className="font-bold text-slate-800">{t.progress_pct || 0}%</span>
-                      </td>
-
-                      <td className="py-4 px-6 text-right">
-                        <button className="text-indigo-600 font-semibold hover:underline">
-                          Details →
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-4 px-6 text-right">
+                          <button className="text-indigo-600 font-semibold hover:underline">
+                            Details →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

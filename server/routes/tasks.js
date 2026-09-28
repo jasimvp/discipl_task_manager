@@ -85,6 +85,12 @@ router.get('/', authMiddleware, (req, res) => {
     query += ` AND t.rejection_status = 'requested'`;
   }
 
+  if (req.query.overdue_only === 'true') {
+    const today = new Date().toISOString().split('T')[0];
+    query += ` AND t.due_date IS NOT NULL AND t.due_date < ? AND t.status != 'completed'`;
+    params.push(today);
+  }
+
   if (search) {
     query += ` AND (t.title LIKE ? OR t.description LIKE ?)`;
     params.push(`%${search}%`, `%${search}%`);
@@ -126,7 +132,16 @@ router.get('/:id', authMiddleware, (req, res) => {
     ORDER BY a.created_at DESC
   `).all(req.params.id);
 
-  res.json({ ...task, activities });
+  // Get discussion comments
+  const comments = db.prepare(`
+    SELECT c.*, u.name as user_name, u.avatar as user_avatar, u.role as user_role, u.title as user_title
+    FROM task_comments c
+    JOIN users u ON c.user_id = u.id
+    WHERE c.task_id = ?
+    ORDER BY c.created_at ASC
+  `).all(req.params.id);
+
+  res.json({ ...task, activities, comments });
 });
 
 // CREATE task (Founders and Team Leads)
@@ -215,7 +230,7 @@ router.put('/:id', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Not authorized to modify this task' });
   }
 
-  const { status, progress_pct, title, description, priority, due_date } = req.body;
+  const { status, progress_pct, title, description, priority, due_date, deliverable_url, deliverable_notes } = req.body;
   let newStatus = status || task.status;
   let newProgress = progress_pct !== undefined ? Number(progress_pct) : task.progress_pct;
 
@@ -231,12 +246,14 @@ router.put('/:id', authMiddleware, (req, res) => {
   const newDesc = (isFounder || isLead || isCreator) && description !== undefined ? description : task.description;
   const newPriority = (isFounder || isLead || isCreator) && priority ? priority : task.priority;
   const newDueDate = (isFounder || isLead || isCreator) && due_date !== undefined ? due_date : task.due_date;
+  const newDeliverableUrl = deliverable_url !== undefined ? (deliverable_url ? deliverable_url.trim() : null) : task.deliverable_url;
+  const newDeliverableNotes = deliverable_notes !== undefined ? deliverable_notes : task.deliverable_notes;
 
   db.prepare(`
     UPDATE tasks
-    SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, progress_pct = ?, updated_at = CURRENT_TIMESTAMP
+    SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, progress_pct = ?, deliverable_url = ?, deliverable_notes = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(newTitle, newDesc, newStatus, newPriority, newDueDate, newProgress, taskId);
+  `).run(newTitle, newDesc, newStatus, newPriority, newDueDate, newProgress, newDeliverableUrl, newDeliverableNotes, taskId);
 
   if (task.status !== newStatus) {
     recordActivity(taskId, user.id, 'status_changed', `Status updated from ${task.status} to ${newStatus}`);
@@ -256,6 +273,10 @@ router.put('/:id', authMiddleware, (req, res) => {
     recordActivity(taskId, user.id, 'progress_updated', `Progress updated to ${newProgress}%`);
   }
 
+  if (deliverable_url && deliverable_url !== task.deliverable_url) {
+    recordActivity(taskId, user.id, 'deliverable_attached', `${user.name} attached deliverable link: ${deliverable_url}`);
+  }
+
   const updatedTask = db.prepare(`
     SELECT t.*,
            assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role,
@@ -272,6 +293,82 @@ router.put('/:id', authMiddleware, (req, res) => {
   }
 
   res.json(updatedTask);
+});
+
+// POST comment to task (Discussions & Deliverables collaboration)
+router.post('/:id/comments', authMiddleware, (req, res) => {
+  const taskId = req.params.id;
+  const user = req.user;
+  const { content, deliverable_url } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment text is required' });
+  }
+
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  // Insert comment
+  const stmt = db.prepare(`
+    INSERT INTO task_comments (task_id, user_id, content, deliverable_url)
+    VALUES (?, ?, ?, ?)
+  `);
+  const result = stmt.run(
+    taskId,
+    user.id,
+    content.trim(),
+    deliverable_url && deliverable_url.trim() ? deliverable_url.trim() : null
+  );
+
+  // If deliverable_url was provided, also update task.deliverable_url
+  if (deliverable_url && deliverable_url.trim()) {
+    db.prepare('UPDATE tasks SET deliverable_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(deliverable_url.trim(), taskId);
+  }
+
+  // Record in activity history
+  recordActivity(
+    taskId,
+    user.id,
+    'comment',
+    `${user.name} commented: "${content.trim().substring(0, 60)}${content.length > 60 ? '...' : ''}"`
+  );
+
+  // Notify assignee or creator
+  if (task.assigned_to && task.assigned_to !== user.id) {
+    addNotification(
+      task.assigned_to,
+      `New comment on Task #${task.id}`,
+      `${user.name}: "${content.trim().substring(0, 80)}"`,
+      'task_comment',
+      taskId
+    );
+  }
+  if (task.assigned_by && task.assigned_by !== user.id && task.assigned_by !== task.assigned_to) {
+    addNotification(
+      task.assigned_by,
+      `New comment on Task #${task.id}`,
+      `${user.name}: "${content.trim().substring(0, 80)}"`,
+      'task_comment',
+      taskId
+    );
+  }
+
+  const newComment = db.prepare(`
+    SELECT c.*, u.name as user_name, u.avatar as user_avatar, u.role as user_role, u.title as user_title
+    FROM task_comments c
+    JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `).get(result.lastInsertRowid);
+
+  if (req.io) {
+    req.io.emit('task_comment_added', { taskId: Number(taskId), comment: newComment });
+    req.io.emit('task_updated', { id: Number(taskId) });
+  }
+
+  res.status(201).json(newComment);
 });
 
 // EMPLOYEE REQUESTS REJECTION / WRONG ASSIGNMENT
