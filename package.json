@@ -1,0 +1,16 @@
+{
+  "name": "task_manager",
+  "version": "1.0.0",
+  "description": "Enterprise Task Manager with RBAC, Reassignments, Status Tracking & Realtime Messaging",
+  "main": "server/index.js",
+  "scripts": {
+    "server": "node server/index.js",
+    "client": "npm run dev --prefix client",
+    "dev": "npx concurrently \"npm run server\" \"npm run client\"",
+    "build": "npm run build --prefix client"
+  },
+  "keywords": ["task-manager", "react", "express", "sqlite"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
