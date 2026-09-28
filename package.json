@@ -4,6 +4,7 @@
   "description": "Enterprise Task Manager with RBAC, Reassignments, Status Tracking & Realtime Messaging",
   "main": "server/index.js",
   "scripts": {
+    "start": "node server/index.js",
     "server": "node server/index.js",
     "client": "npm run dev --prefix client",
     "dev": "npx concurrently \"npm run server\" \"npm run client\"",

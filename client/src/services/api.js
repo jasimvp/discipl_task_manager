@@ -9,6 +9,12 @@ function getHeaders() {
 }
 
 export const api = {
+  async getSetupStatus() {
+    const res = await fetch(`${API_BASE}/auth/setup-status`);
+    if (!res.ok) throw new Error('Failed to fetch setup status');
+    return res.json();
+  },
+
   // Auth & Registration
   async login(email, password) {
     const res = await fetch(`${API_BASE}/auth/login`, {

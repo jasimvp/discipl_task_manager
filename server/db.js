@@ -1,12 +1,15 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv');
 
-const dbPath = path.join(__dirname, 'taskmanager.db');
+dotenv.config();
+
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'taskmanager.db');
 const db = new Database(dbPath);
 
-// Enable foreign keys
+// Enable foreign keys and WAL mode for better concurrency in production
 db.pragma('foreign_keys = ON');
+db.pragma('journal_mode = WAL');
 
 function initDb() {
   db.exec(`
@@ -91,52 +94,16 @@ function initDb() {
     );
   `);
 
-  // Migration: ensure status column exists in users table if table was previously created
-  try {
-    const colInfo = db.prepare("PRAGMA table_info(users)").all();
-    const hasStatus = colInfo.some(c => c.name === 'status');
-    if (!hasStatus) {
-      db.prepare("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'").run();
-    }
-  } catch (err) {
-    console.error('Migration error:', err);
+  // Seed default Deciple company teams if empty (no users seeded - fully dynamic!)
+  const teamCount = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
+  if (teamCount === 0) {
+    const insertTeam = db.prepare('INSERT INTO teams (name, description) VALUES (?, ?)');
+    insertTeam.run('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure');
+    insertTeam.run('Product & Design', 'UI/UX design, product strategy, user experience and wireframing');
+    insertTeam.run('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy');
+    insertTeam.run('Operations & Management', 'Business operations, project delivery, and administration');
+    console.log('✅ Deciple core departments initialized.');
   }
-
-  // Seed default Founder account and standard departments if empty
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  if (userCount === 0) {
-    seedInitialData();
-  }
-}
-
-function seedInitialData() {
-  const hashedPassword = bcrypt.hashSync('password123', 10);
-
-  // Create core Teams
-  const insertTeam = db.prepare('INSERT INTO teams (name, description) VALUES (?, ?)');
-  const engTeam = insertTeam.run('Engineering & Tech', 'Core software development, backend, frontend, QA and DevOps');
-  const designTeam = insertTeam.run('Design & Creative', 'UI/UX design, branding, product research');
-  const opsTeam = insertTeam.run('Operations & Management', 'Business operations, project delivery, and strategy');
-
-  // Insert initial Founder
-  const insertUser = db.prepare(`
-    INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  insertUser.run(
-    'Company Founder',
-    'founder@company.com',
-    hashedPassword,
-    'founder',
-    'Founder & CEO',
-    'Executive Leadership',
-    opsTeam.lastInsertRowid,
-    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    'approved'
-  );
-
-  console.log('✅ Initial database setup complete: Founder account created (founder@company.com / password123)');
 }
 
 initDb();

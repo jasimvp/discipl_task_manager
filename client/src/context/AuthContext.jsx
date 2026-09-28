@@ -13,7 +13,9 @@ export function AuthProvider({ children }) {
 
   // Initialize socket connection
   useEffect(() => {
-    const s = io('http://localhost:5000');
+    // In production, socket connects to current host; in dev to localhost:5000
+    const socketUrl = window.location.port === '5173' ? 'http://localhost:5000' : window.location.origin;
+    const s = io(socketUrl);
     setSocket(s);
 
     return () => {
@@ -45,7 +47,7 @@ export function AuthProvider({ children }) {
     loadUser();
   }, [token]);
 
-  // Load available users list when logged in
+  // Load active company users list when logged in
   const refreshUsers = async () => {
     if (token) {
       try {
@@ -61,15 +63,27 @@ export function AuthProvider({ children }) {
     refreshUsers();
   }, [token, user]);
 
-  // Listen for socket events
+  // Listen for real-time socket events
   useEffect(() => {
     if (!socket || !user) return;
 
     socket.emit('join_user', user.id);
 
     const handleUserAdded = () => refreshUsers();
-    const handleAccessApproved = () => refreshUsers();
-    const handleUserRemoved = () => refreshUsers();
+    const handleAccessApproved = (data) => {
+      refreshUsers();
+      if (data && data.userId === user.id) {
+        // If current user was approved, refresh their profile live!
+        api.getMe().then(setUser).catch(console.error);
+      }
+    };
+    const handleUserRemoved = (data) => {
+      if (data && data.userId === user.id) {
+        logout();
+      } else {
+        refreshUsers();
+      }
+    };
 
     socket.on('user_added', handleUserAdded);
     socket.on('access_approved', handleAccessApproved);
@@ -102,30 +116,6 @@ export function AuthProvider({ children }) {
     return res;
   };
 
-  const switchUser = async (userId) => {
-    // Convenient role switcher for testing
-    // To switch, we can either re-login or switch directly
-    // If testing on localhost, we can allow testing login directly
-    try {
-      setLoading(true);
-      const res = await fetch('/api/auth/switch-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('tm_token', data.token);
-        setToken(data.token);
-        setUser(data.user);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const logout = () => {
     localStorage.removeItem('tm_token');
     setToken(null);
@@ -140,7 +130,6 @@ export function AuthProvider({ children }) {
       socket,
       login,
       register,
-      switchUser,
       logout,
       refreshUsers,
       loading

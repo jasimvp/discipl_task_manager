@@ -3,6 +3,10 @@ const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 // Initialize database
 require('./db');
@@ -32,30 +36,39 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/messages', messageRoutes);
 
+// Production Static Client Serving (if client/dist exists)
+const clientDistPath = path.join(__dirname, '../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  // Express 5 compatible SPA fallback middleware
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
+      return res.sendFile(path.join(clientDistPath, 'index.html'));
+    }
+    next();
+  });
+}
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  // Join user's personal notification room
   socket.on('join_user', (userId) => {
     socket.join(`user_${userId}`);
   });
 
-  // Join team channel room
   socket.on('join_team', (teamId) => {
     socket.join(`team_${teamId}`);
   });
 
-  socket.on('disconnect', () => {
-    // disconnected
-  });
+  socket.on('disconnect', () => {});
 });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`🚀 Task Manager API Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Deciple Task Manager Production Server running on http://localhost:${PORT}`);
 });

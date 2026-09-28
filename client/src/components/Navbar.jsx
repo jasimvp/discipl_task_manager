@@ -9,16 +9,15 @@ import {
   Bell, 
   ChevronDown, 
   ShieldAlert, 
-  Sparkles,
   CheckCircle2,
   KeyRound,
   LogOut,
-  UserCheck
+  Sparkles
 } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function Navbar({ activeTab, setActiveTab }) {
-  const { user, availableUsers, switchUser, logout, socket } = useAuth();
+  const { user, logout, socket } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -98,17 +97,17 @@ export default function Navbar({ activeTab, setActiveTab }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
-          {/* Logo & Brand */}
+          {/* Deciple Brand */}
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-100">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-100">
               <CheckSquare className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-lg text-slate-900 tracking-tight">TaskFlow Pro</span>
-                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Enterprise</span>
+                <span className="font-extrabold text-xl text-slate-900 tracking-tight">Deciple</span>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200/70 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">Enterprise</span>
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">Company Task & Team Management</p>
+              <p className="text-[11px] text-slate-400 hidden sm:block">Deciple Task & Team Workspace</p>
             </div>
           </div>
 
@@ -116,9 +115,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
           <nav className="hidden md:flex items-center space-x-1 lg:space-x-1.5">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'dashboard'
-                  ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                  ? 'bg-indigo-50 text-indigo-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
@@ -128,9 +127,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
             <button
               onClick={() => setActiveTab('tasks')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'tasks'
-                  ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                  ? 'bg-indigo-50 text-indigo-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
@@ -140,9 +139,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
             <button
               onClick={() => setActiveTab('reassignments')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all relative ${
                 activeTab === 'reassignments'
-                  ? 'bg-amber-50 text-amber-800 font-semibold border border-amber-200/60'
+                  ? 'bg-amber-50 text-amber-800 font-bold border border-amber-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
@@ -157,9 +156,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
             <button
               onClick={() => setActiveTab('messages')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'messages'
-                  ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                  ? 'bg-indigo-50 text-indigo-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
@@ -169,9 +168,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
             <button
               onClick={() => setActiveTab('team')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'team'
-                  ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                  ? 'bg-indigo-50 text-indigo-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
@@ -183,9 +182,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
             {isFounder && (
               <button
                 onClick={() => setActiveTab('access')}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all relative ${
                   activeTab === 'access'
-                    ? 'bg-purple-50 text-purple-800 font-semibold border border-purple-200/70'
+                    ? 'bg-purple-50 text-purple-800 font-bold border border-purple-200/70'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -268,14 +267,14 @@ export default function Navbar({ activeTab, setActiveTab }) {
               )}
             </div>
 
-            {/* Profile & User Menu */}
+            {/* Profile Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all text-left bg-white shadow-2xs"
               >
                 <img
-                  src={user?.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100'}
+                  src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                   alt={user?.name}
                   className="w-8 h-8 rounded-lg object-cover ring-2 ring-slate-100"
                 />
@@ -294,34 +293,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
                   <div className="px-3 py-2 border-b border-slate-100 mb-2">
                     <p className="text-xs font-bold text-slate-900">{user?.name}</p>
                     <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
-                    <div className="mt-1">{getRoleBadge(user?.role)}</div>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{user?.department || 'General Department'}</p>
+                    <div className="mt-1.5">{getRoleBadge(user?.role)}</div>
                   </div>
-
-                  {/* Switch user testing option if multiple users exist */}
-                  {availableUsers.length > 1 && (
-                    <div className="mb-2 pb-2 border-b border-slate-100">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 px-2 mb-1">
-                        Switch Account (Testing):
-                      </p>
-                      <div className="max-h-36 overflow-y-auto space-y-1">
-                        {availableUsers.map((u) => (
-                          <button
-                            key={u.id}
-                            onClick={() => {
-                              switchUser(u.id);
-                              setShowUserMenu(false);
-                            }}
-                            className={`w-full flex items-center justify-between p-1.5 rounded-lg text-left text-xs transition-colors ${
-                              u.id === user?.id ? 'bg-indigo-50 font-bold text-indigo-700' : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <span className="truncate max-w-[130px]">{u.name}</span>
-                            <span className="text-[10px] text-slate-400 capitalize">{u.role}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Sign Out Button */}
                   <button
