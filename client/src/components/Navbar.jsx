@@ -15,13 +15,14 @@ import {
   Briefcase,
   Menu,
   X,
-  Search
+  Search,
+  UserPlus
 } from 'lucide-react';
 import { api } from '../services/api';
 import DisciplLogo from './DisciplLogo';
 import UserAvatar from './UserAvatar';
 
-export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }) {
+export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, onOpenAddEmployee }) {
   const { user, logout, socket } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -29,7 +30,6 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [reassignmentCount, setReassignmentCount] = useState(0);
-  const [pendingAccessCount, setPendingAccessCount] = useState(0);
 
   const isFounder = user?.role === 'founder';
   const isLead = user?.role === 'team_lead';
@@ -43,11 +43,6 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
 
       const stats = await api.getDashboardStats();
       setReassignmentCount(stats.summary?.pendingRejections || 0);
-
-      if (isFounder) {
-        const reqs = await api.getAccessRequests();
-        setPendingAccessCount(reqs.length || 0);
-      }
     } catch (e) {
       console.error(e);
     }
@@ -191,26 +186,6 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
               <Users className="w-4 h-4" />
               <span>{isLead ? 'My Team' : 'Team'}</span>
             </button>
-
-            {/* Founder Access Requests Tab */}
-            {isFounder && (
-              <button
-                onClick={() => setActiveTab('access')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all relative ${
-                  activeTab === 'access'
-                    ? 'bg-purple-50 text-purple-800 ring-1 ring-purple-200 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <KeyRound className="w-4 h-4 text-purple-600" />
-                <span>Access</span>
-                {pendingAccessCount > 0 && (
-                  <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-bounce">
-                    {pendingAccessCount}
-                  </span>
-                )}
-              </button>
-            )}
           </nav>
 
           {/* User Controls & Profile */}
@@ -240,6 +215,19 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
                   <Search className="w-5 h-5" />
                 </button>
               </>
+            )}
+
+            {/* Founder Quick Add Teammate Button */}
+            {isFounder && onOpenAddEmployee && (
+              <button
+                type="button"
+                onClick={onOpenAddEmployee}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
+                title="Add Employee / Teammate by Email"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Add Teammate</span>
+              </button>
             )}
 
             {/* Notification Bell */}
@@ -446,22 +434,13 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
               <span>{isLead ? 'My Team' : 'Team Directory'}</span>
             </button>
 
-            {isFounder && (
+            {isFounder && onOpenAddEmployee && (
               <button
-                onClick={() => { setActiveTab('access'); setShowMobileMenu(false); }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'access' ? 'bg-purple-50 text-purple-800' : 'text-slate-700 hover:bg-slate-50'
-                }`}
+                onClick={() => { onOpenAddEmployee(); setShowMobileMenu(false); }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-purple-50 text-purple-800 hover:bg-purple-100"
               >
-                <div className="flex items-center gap-3">
-                  <KeyRound className="w-4 h-4 text-purple-600" />
-                  <span>Access & Join Requests</span>
-                </div>
-                {pendingAccessCount > 0 && (
-                  <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce">
-                    {pendingAccessCount}
-                  </span>
-                )}
+                <UserPlus className="w-4 h-4 text-purple-600" />
+                <span>+ Add Teammate (Employee / Lead)</span>
               </button>
             )}
           </div>
@@ -546,31 +525,29 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette }
           <span className="text-[10px] mt-0.5 leading-none">Messages</span>
         </button>
 
-        {/* Tab 5: Access (for Founder) OR More/Menu */}
-        {isFounder ? (
+        {/* Tab 5: Team (for Founder/Lead) */}
+        {(isFounder || isLead) && (
           <button
-            onClick={() => setActiveTab('access')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative ${
-              activeTab === 'access' ? 'text-purple-600 font-bold scale-105' : 'text-slate-500'
-            }`}
-          >
-            <KeyRound className="w-5 h-5" />
-            {pendingAccessCount > 0 && (
-              <span className="absolute top-0 right-1 w-2 h-2 bg-rose-500 rounded-full animate-ping" />
-            )}
-            <span className="text-[10px] mt-0.5 leading-none">Access</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            onClick={() => setActiveTab('team')}
             className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-              showMobileMenu ? 'text-indigo-600 font-bold' : 'text-slate-500'
+              activeTab === 'team' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
             }`}
           >
-            <Menu className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5 leading-none">More</span>
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 leading-none">Team</span>
           </button>
         )}
+
+        {/* Menu */}
+        <button
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+            showMobileMenu ? 'text-indigo-600 font-bold' : 'text-slate-500'
+          }`}
+        >
+          <Menu className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-none">Menu</span>
+        </button>
       </nav>
     </header>
   );

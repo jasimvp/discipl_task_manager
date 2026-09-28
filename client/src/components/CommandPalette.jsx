@@ -14,7 +14,8 @@ import {
   Clock,
   AlertTriangle,
   Link2,
-  Calendar
+  Calendar,
+  UserPlus
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -24,6 +25,7 @@ export default function CommandPalette({
   onSelectTask,
   onNavigateTab,
   onOpenChatWithUser,
+  onOpenAddEmployee,
 }) {
   const { user, availableUsers } = useAuth();
   const [query, setQuery] = useState('');
@@ -86,16 +88,16 @@ export default function CommandPalette({
           },
         ]
       : []),
-    ...(isFounder
+    ...(isFounder && onOpenAddEmployee
       ? [
           {
-            id: 'nav-access',
+            id: 'action-add-employee',
             type: 'nav',
-            title: 'Founder Access Approvals',
-            description: 'Verify and grant workspace access to new employees',
-            icon: KeyRound,
-            action: () => onNavigateTab('access'),
-            keywords: ['access', 'requests', 'registration', 'approve', 'founder', 'verification'],
+            title: '+ Add Teammate / Employee',
+            description: 'Directly add an employee or team lead using their work email',
+            icon: UserPlus,
+            action: () => onOpenAddEmployee(),
+            keywords: ['add', 'employee', 'teammate', 'invite', 'user', 'member', 'hire'],
           },
         ]
       : []),

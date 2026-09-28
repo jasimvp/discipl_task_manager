@@ -7,7 +7,7 @@ import TaskBoardView from './components/TaskBoardView';
 import ReassignmentsView from './components/ReassignmentsView';
 import MessagesView from './components/MessagesView';
 import TeamWorkloadView from './components/TeamWorkloadView';
-import AccessRequestsView from './components/AccessRequestsView';
+import AddEmployeeModal from './components/AddEmployeeModal';
 import TaskModal from './components/TaskModal';
 import TaskDetailsModal from './components/TaskDetailsModal';
 import CommandPalette from './components/CommandPalette';
@@ -18,6 +18,7 @@ function MainApp() {
   
   // Modals
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [chatDirectUserId, setChatDirectUserId] = useState(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -45,7 +46,7 @@ function MainApp() {
     );
   }
 
-  // If not logged in, show authentication login / request access screen
+  // If not logged in, show authentication login screen
   if (!user) {
     return <AuthView />;
   }
@@ -63,17 +64,8 @@ function MainApp() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenAddEmployee={() => setIsAddEmployeeOpen(true)}
       />
-
-      {/* Pending Founder Verification Banner if applicable */}
-      {user?.status === 'pending' && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-center text-xs text-amber-900 font-medium flex items-center justify-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-          <span>
-            <strong>Account Logged In:</strong> Your company membership verification has been sent to the Founder. Once verified, full company channels and deliverables will be unlocked.
-          </span>
-        </div>
-      )}
 
       {/* Main Content Area - with mobile bottom nav spacing pb-24 md:pb-10 */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-24 md:pb-10">
@@ -82,6 +74,7 @@ function MainApp() {
             onNavigateTab={setActiveTab}
             onOpenCreateTask={() => setIsCreateTaskOpen(true)}
             onSelectTask={(id) => setSelectedTaskId(id)}
+            onOpenAddEmployee={() => setIsAddEmployeeOpen(true)}
           />
         )}
 
@@ -106,11 +99,8 @@ function MainApp() {
           <TeamWorkloadView
             onOpenCreateTask={() => setIsCreateTaskOpen(true)}
             onOpenChatWithUser={handleOpenChatWithUser}
+            onOpenAddEmployee={() => setIsAddEmployeeOpen(true)}
           />
-        )}
-
-        {activeTab === 'access' && user?.role === 'founder' && (
-          <AccessRequestsView />
         )}
       </main>
 
@@ -120,6 +110,15 @@ function MainApp() {
         onClose={() => setIsCreateTaskOpen(false)}
         onTaskCreated={() => {
           // Socket event will also trigger update across all open tabs
+        }}
+      />
+
+      {/* Add Employee Modal (Founder Direct Addition by Email) */}
+      <AddEmployeeModal
+        isOpen={isAddEmployeeOpen}
+        onClose={() => setIsAddEmployeeOpen(false)}
+        onUserAdded={() => {
+          // Socket event user_added updates users across app
         }}
       />
 
@@ -140,6 +139,7 @@ function MainApp() {
         onSelectTask={(id) => setSelectedTaskId(id)}
         onNavigateTab={(tab) => setActiveTab(tab)}
         onOpenChatWithUser={handleOpenChatWithUser}
+        onOpenAddEmployee={() => setIsAddEmployeeOpen(true)}
       />
 
     </div>

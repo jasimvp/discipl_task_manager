@@ -116,6 +116,10 @@ export const api = {
     return res.json();
   },
 
+  async addEmployee(userData) {
+    return this.inviteUser(userData);
+  },
+
   async deleteUser(userId) {
     const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
       method: 'DELETE',

@@ -14,22 +14,6 @@ router.get('/setup-status', (req, res) => {
   });
 });
 
-// Register - Creates account and logs in immediately
-router.post('/register', (req, res) => {
-  const { name, email, password, role, title, department, team_id } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password are required' });
-  }
-
-  const cleanEmail = email.toLowerCase().trim();
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
-  if (existing) {
-    return res.status(400).json({ error: 'An account with this email already exists' });
-  }
-
-  const hashedPassword = bcrypt.hashSync(password, 10);
-  
 // Generate static corporate SVG avatar based on name and role
 function generateStaticAvatar(name, role) {
   const initials = (name || 'User')
@@ -59,13 +43,34 @@ function generateStaticAvatar(name, role) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-  const targetRole = role || 'employee';
+// Register - Only allowed for initial Founder setup when company is new
+router.post('/register', (req, res) => {
+  const { name, email, password, role, title, department, team_id } = req.body;
+
+  const founderCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'founder'").get().count;
+  if (founderCount > 0) {
+    return res.status(403).json({
+      error: 'Public registration is closed. All employees and team leads are added directly by the Founder with their email.'
+    });
+  }
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+  if (existing) {
+    return res.status(400).json({ error: 'An account with this email already exists' });
+  }
+
+  const hashedPassword = bcrypt.hashSync(password, 10);
+  const targetRole = 'founder';
   const avatar = generateStaticAvatar(name, targetRole);
-  const initialStatus = targetRole === 'founder' ? 'approved' : 'pending';
 
   const stmt = db.prepare(`
     INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved')
   `);
 
   const result = stmt.run(
@@ -73,54 +78,20 @@ function generateStaticAvatar(name, role) {
     cleanEmail,
     hashedPassword,
     targetRole,
-    title ? title.trim() : (targetRole === 'founder' ? 'Founder & CEO' : targetRole === 'team_lead' ? 'Team Lead' : 'Employee'),
-    department ? department.trim() : 'General',
+    title ? title.trim() : 'Founder & CEO',
+    department ? department.trim() : 'Executive',
     team_id ? Number(team_id) : null,
-    avatar,
-    initialStatus
+    avatar
   );
 
   const newUserId = result.lastInsertRowid;
-
-  // If employee or lead, notify founders so they can approve/assign department
-  if (initialStatus === 'pending') {
-    const founders = db.prepare("SELECT id FROM users WHERE role = 'founder' AND status = 'approved'").all();
-    for (const f of founders) {
-      try {
-        db.prepare(`
-          INSERT INTO notifications (user_id, title, message, type)
-          VALUES (?, ?, ?, 'access_request')
-        `).run(
-          f.id,
-          'New Employee Registration',
-          `${name.trim()} registered as ${targetRole === 'team_lead' ? 'Team Lead' : 'Employee'} (${department || 'General'}).`
-        );
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    if (req.io) {
-      req.io.emit('new_access_request', {
-        id: newUserId,
-        name: name.trim(),
-        email: cleanEmail,
-        role: targetRole,
-        department,
-      });
-    }
-  }
-
-  // Generate token and log in immediately
   const newUser = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(newUserId);
   const token = generateToken(newUser);
 
   res.status(201).json({
     token,
     user: newUser,
-    message: initialStatus === 'pending'
-      ? 'Welcome to Discipl! You are logged in. Your company verification request has been sent to the Founder.'
-      : 'Welcome to Discipl! Founder account created successfully.',
+    message: 'Welcome to Discipl! Initial Founder workspace initialized successfully.',
   });
 });
 
@@ -254,7 +225,7 @@ router.post('/access-requests/:id/reject', authMiddleware, requireRoles('founder
 });
 
 // FOUNDER: Direct Invite / Add Employee
-router.post('/invite-user', authMiddleware, requireRoles('founder'), (req, res) => {
+router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('founder'), (req, res) => {
   const { name, email, password, role, title, department, team_id } = req.body;
 
   if (!name || !email || !password || !role) {
@@ -278,7 +249,7 @@ router.post('/invite-user', authMiddleware, requireRoles('founder'), (req, res) 
     cleanEmail,
     hashedPassword,
     role,
-    title ? title.trim() : (role === 'team_lead' ? 'Team Lead' : 'Employee'),
+    title ? title.trim() : (role === 'founder' ? 'Co-Founder' : role === 'team_lead' ? 'Team Lead' : 'Employee'),
     department ? department.trim() : 'General',
     team_id ? Number(team_id) : null,
     avatar
@@ -290,7 +261,16 @@ router.post('/invite-user', authMiddleware, requireRoles('founder'), (req, res) 
     req.io.emit('user_added', newUser);
   }
 
-  res.status(201).json({ message: `Employee ${name} added successfully!`, user: newUser });
+  res.status(201).json({
+    message: `${role === 'founder' ? 'Founder' : role === 'team_lead' ? 'Team Lead' : 'Employee'} ${name} added successfully!`,
+    user: newUser,
+    credentials: {
+      name: name.trim(),
+      email: cleanEmail,
+      password: password,
+      role: role
+    }
+  });
 });
 
 // FOUNDER: Revoke Access or Delete User

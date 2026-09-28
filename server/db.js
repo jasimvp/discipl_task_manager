@@ -112,6 +112,9 @@ function initDb() {
   try {
     db.exec('ALTER TABLE tasks ADD COLUMN deliverable_notes TEXT');
   } catch (e) {}
+  try {
+    db.exec("UPDATE users SET status = 'approved' WHERE status = 'pending'");
+  } catch (e) {}
 
   // Seed default Discipl company teams if empty (no users seeded - fully dynamic!)
   const teamCount = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;

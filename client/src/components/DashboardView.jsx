@@ -18,12 +18,13 @@ import {
   Check,
   Calendar,
   AlertCircle,
-  Link2
+  Link2,
+  UserPlus
 } from 'lucide-react';
 import DisciplLogo from './DisciplLogo';
 import UserAvatar from './UserAvatar';
 
-export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelectTask }) {
+export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelectTask, onOpenAddEmployee }) {
   const { user, socket } = useAuth();
   const [stats, setStats] = useState(null);
   const [myTasks, setMyTasks] = useState([]);
@@ -155,13 +156,13 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                 Assign Task
               </button>
             )}
-            {isFounder && (
+            {isFounder && onOpenAddEmployee && (
               <button
-                onClick={() => onNavigateTab('access')}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-200 text-xs font-bold transition-all"
+                onClick={onOpenAddEmployee}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all active:scale-95"
               >
-                <KeyRound className="w-3.5 h-3.5" />
-                Access Requests
+                <UserPlus className="w-3.5 h-3.5" />
+                Add Teammate
               </button>
             )}
             <button

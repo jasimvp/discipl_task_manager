@@ -9,11 +9,12 @@ import {
   Clock, 
   AlertCircle, 
   Mail, 
-  Briefcase 
+  Briefcase,
+  UserPlus
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
-export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser }) {
+export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser, onOpenAddEmployee }) {
   const { user, availableUsers } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,15 +52,27 @@ export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser 
           </p>
         </div>
 
-        {(isFounder || isLead) && (
-          <button
-            onClick={onOpenCreateTask}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all active:scale-95"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Assign Task
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isFounder && onOpenAddEmployee && (
+            <button
+              onClick={onOpenAddEmployee}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-600/30 transition-all active:scale-95"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Teammate</span>
+            </button>
+          )}
+
+          {(isFounder || isLead) && (
+            <button
+              onClick={onOpenCreateTask}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all active:scale-95"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Assign Task</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid of Employee Workload Cards */}
