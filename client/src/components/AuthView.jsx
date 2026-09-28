@@ -76,14 +76,8 @@ export default function AuthView() {
         title: regTitle.trim() || (regRole === 'team_lead' ? 'Team Lead' : 'Employee'),
       });
 
-      if (res.pending) {
-        setSuccessNotice('🎉 Access Request Submitted! The Founder has been notified. You will be able to log in as soon as the Founder grants access.');
-        setMode('login');
-        setLoginEmail(regEmail);
-        setLoginPassword('');
-      } else {
-        setSuccessNotice('Account created successfully!');
-      }
+      // User is immediately logged in by register()
+      setSuccessNotice('Account created successfully! Entering workspace...');
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {

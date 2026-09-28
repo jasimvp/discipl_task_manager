@@ -93,7 +93,13 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (userData) => {
-    return await api.register(userData);
+    const res = await api.register(userData);
+    if (res.token) {
+      localStorage.setItem('tm_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
+    }
+    return res;
   };
 
   const switchUser = async (userId) => {

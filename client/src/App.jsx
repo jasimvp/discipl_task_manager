@@ -47,6 +47,16 @@ function MainApp() {
       {/* Navigation Header */}
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
+      {/* Pending Founder Verification Banner if applicable */}
+      {user?.status === 'pending' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-center text-xs text-amber-900 font-medium flex items-center justify-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+          <span>
+            <strong>Account Logged In:</strong> Your company membership verification has been sent to the Founder. Once verified, full company channels and deliverables will be unlocked.
+          </span>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {activeTab === 'dashboard' && (
