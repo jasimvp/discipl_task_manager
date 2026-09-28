@@ -12,6 +12,7 @@ import {
   Briefcase,
   ShieldCheck
 } from 'lucide-react';
+import DisciplLogo from './DisciplLogo';
 
 export default function AuthView() {
   const { login, register } = useAuth();
@@ -83,15 +84,11 @@ export default function AuthView() {
 
       {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-xl shadow-indigo-600/30 mb-3.5">
-          <CheckSquare className="w-8 h-8 stroke-[2.2]" />
+        <div className="flex justify-center mb-3">
+          <DisciplLogo size="lg" />
         </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center justify-center gap-2">
-          <span>Discipl</span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Workspace</span>
-        </h1>
-        <p className="mt-1 text-xs text-slate-400">
-          Discipl Enterprise Task Management & Team Collaboration
+        <p className="mt-2 text-xs text-slate-400">
+          Discipl Task & Team Management Workspace
         </p>
       </div>
 

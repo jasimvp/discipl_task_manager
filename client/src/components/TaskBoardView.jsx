@@ -21,6 +21,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' or 'list'
+  const [scope, setScope] = useState(user?.role === 'employee' ? 'mine' : 'all'); // 'mine' or 'all'
   
   // Filters
   const [search, setSearch] = useState('');
@@ -33,7 +34,12 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
       const params = {};
       if (search) params.search = search;
       if (selectedPriority) params.priority = selectedPriority;
-      if (selectedAssignee) params.assigned_to = selectedAssignee;
+      
+      if (user?.role === 'employee' && scope === 'mine') {
+        params.assigned_to = user.id;
+      } else if (selectedAssignee) {
+        params.assigned_to = selectedAssignee;
+      }
 
       const data = await api.getTasks(params);
       setTasks(data);
@@ -46,7 +52,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
 
   useEffect(() => {
     fetchTasks();
-  }, [user, search, selectedPriority, selectedAssignee]);
+  }, [user, search, selectedPriority, selectedAssignee, scope]);
 
   // Real-time task events via Socket.IO
   useEffect(() => {
@@ -100,17 +106,53 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Task Management Board</h1>
+            <h1 className="text-xl font-bold text-slate-900">
+              {isFounder 
+                ? 'Discipl Deliverables Board' 
+                : isLead 
+                ? `${user?.department ? user.department + ' ' : ''}Deliverables` 
+                : scope === 'mine' ? 'My Deliverables' : 'Team Deliverables'}
+            </h1>
             <p className="text-xs text-slate-500">
               {isFounder 
-                ? 'Overview of all company tasks across all teams & employees' 
+                ? 'Executive overview of all company tasks across all teams & employees' 
                 : isLead 
                 ? 'Team deliverables and task assignments' 
-                : 'Tasks assigned to you and your team'}
+                : scope === 'mine'
+                ? 'Tasks assigned directly to you'
+                : 'All deliverables across your department'}
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center flex-wrap gap-3">
+            {/* Scope toggle for employees & leads */}
+            {!isFounder && (
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setScope('mine')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    scope === 'mine'
+                      ? 'bg-white text-indigo-600 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🎯 My Tasks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    scope === 'all'
+                      ? 'bg-white text-indigo-600 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🌐 All Tasks
+                </button>
+              </div>
+            )}
+
             {/* View Mode Toggle */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl">
               <button
