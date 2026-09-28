@@ -12,7 +12,9 @@ import {
   CheckCircle2, 
   KeyRound, 
   LogOut,
-  Briefcase
+  Briefcase,
+  Menu,
+  X
 } from 'lucide-react';
 import { api } from '../services/api';
 import DisciplLogo from './DisciplLogo';
@@ -23,6 +25,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [reassignmentCount, setReassignmentCount] = useState(0);
   const [pendingAccessCount, setPendingAccessCount] = useState(0);
 
@@ -321,10 +324,224 @@ export default function Navbar({ activeTab, setActiveTab }) {
               )}
             </div>
 
+            {/* Mobile Hamburger Menu Toggle Button */}
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="md:hidden p-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+              aria-label="Toggle navigation menu"
+            >
+              {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
           </div>
 
         </div>
       </div>
+
+      {/* MOBILE SLIDE-DOWN DRAWER MENU */}
+      {showMobileMenu && (
+        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-5 space-y-2 animate-in slide-in-from-top-3 duration-200 shadow-xl">
+          <div className="p-3 bg-slate-50 rounded-2xl mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img
+                src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                alt={user?.name}
+                className="w-10 h-10 rounded-xl object-cover ring-2 ring-white"
+              />
+              <div>
+                <p className="text-xs font-bold text-slate-900">{user?.name}</p>
+                <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{user?.email}</p>
+                <div className="mt-1">{getRoleBadge(user?.role)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <button
+              onClick={() => { setActiveTab('dashboard'); setShowMobileMenu(false); }}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4 text-indigo-600" />
+              <span>{isEmployee ? 'My Workspace' : isLead ? 'Team Dashboard' : 'Executive Dashboard'}</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('tasks'); setShowMobileMenu(false); }}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'tasks' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <CheckSquare className="w-4 h-4 text-indigo-600" />
+              <span>{isEmployee ? 'My Tasks & Deliverables' : 'Tasks Board'}</span>
+            </button>
+
+            {(isFounder || isLead) && (
+              <button
+                onClick={() => { setActiveTab('reassignments'); setShowMobileMenu(false); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'reassignments' ? 'bg-amber-50 text-amber-800' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <span>Reassignment Requests</span>
+                </div>
+                {reassignmentCount > 0 && (
+                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {reassignmentCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => { setActiveTab('messages'); setShowMobileMenu(false); }}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'messages' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4 text-indigo-600" />
+              <span>Communication Hub</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('team'); setShowMobileMenu(false); }}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'team' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Users className="w-4 h-4 text-indigo-600" />
+              <span>{isLead ? 'My Team' : 'Team Directory'}</span>
+            </button>
+
+            {isFounder && (
+              <button
+                onClick={() => { setActiveTab('access'); setShowMobileMenu(false); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'access' ? 'bg-purple-50 text-purple-800' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <KeyRound className="w-4 h-4 text-purple-600" />
+                  <span>Access & Join Requests</span>
+                </div>
+                {pendingAccessCount > 0 && (
+                  <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce">
+                    {pendingAccessCount}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+
+          <div className="pt-3 border-t border-slate-100">
+            <button
+              onClick={() => {
+                setShowMobileMenu(false);
+                logout();
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out (ലോഗൗട്ട്)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (Clean, Native Mobile App Feel) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 py-1.5 px-2 flex justify-around items-center shadow-2xl">
+        {/* Tab 1: Dashboard / Workspace */}
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+            activeTab === 'dashboard' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-none">
+            {isEmployee ? 'Workspace' : 'Dashboard'}
+          </span>
+        </button>
+
+        {/* Tab 2: Tasks */}
+        <button
+          onClick={() => setActiveTab('tasks')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+            activeTab === 'tasks' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
+          }`}
+        >
+          <CheckSquare className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-none">
+            {isEmployee ? 'My Tasks' : 'Tasks'}
+          </span>
+        </button>
+
+        {/* Tab 3: Reassignments (for Founder/Lead) OR Team (for Employee) */}
+        {(isFounder || isLead) ? (
+          <button
+            onClick={() => setActiveTab('reassignments')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative ${
+              activeTab === 'reassignments' ? 'text-amber-600 font-bold scale-105' : 'text-slate-500'
+            }`}
+          >
+            <AlertCircle className="w-5 h-5" />
+            {reassignmentCount > 0 && (
+              <span className="absolute top-0 right-1 w-2 h-2 bg-amber-500 rounded-full" />
+            )}
+            <span className="text-[10px] mt-0.5 leading-none">Reassign</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setActiveTab('team')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+              activeTab === 'team' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 leading-none">Team</span>
+          </button>
+        )}
+
+        {/* Tab 4: Messages */}
+        <button
+          onClick={() => setActiveTab('messages')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+            activeTab === 'messages' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-none">Messages</span>
+        </button>
+
+        {/* Tab 5: Access (for Founder) OR More/Menu */}
+        {isFounder ? (
+          <button
+            onClick={() => setActiveTab('access')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative ${
+              activeTab === 'access' ? 'text-purple-600 font-bold scale-105' : 'text-slate-500'
+            }`}
+          >
+            <KeyRound className="w-5 h-5" />
+            {pendingAccessCount > 0 && (
+              <span className="absolute top-0 right-1 w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+            )}
+            <span className="text-[10px] mt-0.5 leading-none">Access</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
+              showMobileMenu ? 'text-indigo-600 font-bold' : 'text-slate-500'
+            }`}
+          >
+            <Menu className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 leading-none">More</span>
+          </button>
+        )}
+      </nav>
     </header>
   );
 }

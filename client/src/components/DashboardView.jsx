@@ -460,7 +460,89 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card List (sm:hidden) */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {employeeStats.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs px-4">
+                  No team members registered yet.
+                </div>
+              ) : (
+                employeeStats.map((emp) => {
+                  const remaining = (emp.total_tasks || 0) - (emp.completed_tasks || 0);
+                  const isSelectedUser = emp.id === user?.id;
+                  return (
+                    <div key={emp.id} className={`p-4 space-y-3 ${isSelectedUser ? 'bg-indigo-50/20' : ''}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                            alt={emp.name}
+                            className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
+                          />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900 text-xs">{emp.name}</span>
+                              {isSelectedUser && (
+                                <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 py-0.2 rounded font-bold">You</span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400">{emp.title || emp.department}</span>
+                          </div>
+                        </div>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
+                          emp.role === 'founder' 
+                            ? 'bg-purple-100 text-purple-700' 
+                            : emp.role === 'team_lead' 
+                            ? 'bg-blue-100 text-blue-700' 
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {emp.role === 'founder' ? 'Founder' : emp.role === 'team_lead' ? 'Lead' : 'Employee'}
+                        </span>
+                      </div>
+
+                      {/* Mini stats */}
+                      <div className="grid grid-cols-4 gap-1 text-center bg-slate-50 p-2 rounded-xl text-[10px]">
+                        <div>
+                          <span className="text-slate-400 block">Assigned</span>
+                          <span className="font-bold text-slate-800">{emp.total_tasks || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-600 block">Done</span>
+                          <span className="font-bold text-emerald-600">{emp.completed_tasks || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-600 block">Working</span>
+                          <span className="font-bold text-blue-600">{emp.in_progress_tasks || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-amber-600 block">Pending</span>
+                          <span className="font-bold text-amber-600">{remaining}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-slate-500 font-medium">Completion</span>
+                          <span className="font-bold text-slate-800">{emp.completion_pct}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              emp.completion_pct === 100 ? 'bg-emerald-500' : 'bg-indigo-600'
+                            }`}
+                            style={{ width: `${emp.completion_pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (hidden sm:block) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                   <tr>

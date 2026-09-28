@@ -25,7 +25,7 @@ function MainApp() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-slate-400">Loading TaskFlow Workspace...</p>
+          <p className="text-xs font-semibold text-slate-400">Loading Discipl Workspace...</p>
         </div>
       </div>
     );
@@ -57,8 +57,8 @@ function MainApp() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      {/* Main Content Area - with mobile bottom nav spacing pb-24 md:pb-10 */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-24 md:pb-10">
         {activeTab === 'dashboard' && (
           <DashboardView
             onNavigateTab={setActiveTab}

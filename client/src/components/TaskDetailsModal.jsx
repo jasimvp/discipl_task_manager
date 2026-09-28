@@ -478,7 +478,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50/60 shrink-0">
           <div>
             {canReassign && (
               <button
@@ -492,7 +492,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {/* If task is assigned to current employee and not already requested */}
             {isAssignee && task?.rejection_status !== 'requested' && !showRejectForm && (
               <button

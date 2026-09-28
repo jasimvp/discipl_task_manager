@@ -11,11 +11,12 @@ import {
   ShieldCheck, 
   Crown, 
   Briefcase,
-  Smile
+  Smile,
+  ArrowLeft
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
-export default function MessagesView() {
+export default function MessagesView({ initialUserId }) {
   const { user, availableUsers } = useAuth();
   
   // Channels and Chat State
@@ -23,6 +24,7 @@ export default function MessagesView() {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [mobileView, setMobileView] = useState(initialUserId ? 'chat' : 'list'); // 'list' or 'chat'
   
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -31,6 +33,19 @@ export default function MessagesView() {
 
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
+
+  // Switch to direct chat if initialUserId provided
+  useEffect(() => {
+    if (initialUserId && availableUsers.length > 0) {
+      const targetUser = availableUsers.find((u) => u.id === Number(initialUserId));
+      if (targetUser) {
+        setSelectedUser(targetUser);
+        setSelectedTeam(null);
+        setActiveTab('direct');
+        setMobileView('chat');
+      }
+    }
+  }, [initialUserId, availableUsers]);
 
   // Initialize Socket.io
   useEffect(() => {
@@ -139,10 +154,12 @@ export default function MessagesView() {
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[750px] flex flex-col md:flex-row mb-12">
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-13rem)] min-h-[520px] md:h-[750px] flex flex-col md:flex-row mb-6">
       
-      {/* SIDEBAR: Channels & Direct Messages */}
-      <div className="w-full md:w-80 border-r border-slate-200 bg-slate-50/70 flex flex-col">
+      {/* SIDEBAR: Channels & Direct Messages (Visible in 'list' mode on mobile, always visible on desktop) */}
+      <div className={`w-full md:w-80 border-r border-slate-200 bg-slate-50/70 flex flex-col shrink-0 ${
+        mobileView === 'chat' ? 'hidden md:flex' : 'flex flex-1'
+      }`}>
         
         {/* Header Tabs */}
         <div className="p-4 border-b border-slate-200 bg-white">
@@ -201,6 +218,7 @@ export default function MessagesView() {
                     onClick={() => {
                       setSelectedTeam(t);
                       setSelectedUser(null);
+                      setMobileView('chat');
                     }}
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left text-xs transition-all ${
                       isSelected
@@ -236,6 +254,7 @@ export default function MessagesView() {
                       onClick={() => {
                         setSelectedUser(u);
                         setSelectedTeam(null);
+                        setMobileView('chat');
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left text-xs transition-all ${
                         isSelected
@@ -269,31 +288,42 @@ export default function MessagesView() {
 
       </div>
 
-      {/* RIGHT PANE: Chat Conversation Feed */}
-      <div className="flex-1 flex flex-col bg-white">
+      {/* RIGHT PANE: Chat Conversation Feed (Visible in 'chat' mode on mobile, always visible on desktop) */}
+      <div className={`flex-1 flex flex-col bg-white ${
+        mobileView === 'list' ? 'hidden md:flex' : 'flex'
+      }`}>
         
-        {/* Chat Top Bar */}
+        {/* Chat Top Bar with Back Button on Mobile */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileView('list')}
+              className="md:hidden p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              title="Back to Channels"
+              aria-label="Back to channels list"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+
             {selectedTeam ? (
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
                 <Hash className="w-5 h-5" />
               </div>
             ) : (
               <img
                 src={selectedUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                 alt={selectedUser?.name}
-                className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100"
+                className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100 shrink-0"
               />
             )}
-            <div>
+            <div className="truncate">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-900 text-sm">
+                <h3 className="font-bold text-slate-900 text-sm truncate">
                   {selectedTeam ? selectedTeam.name : selectedUser?.name}
                 </h3>
                 {selectedUser && getRoleIcon(selectedUser.role)}
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 truncate">
                 {selectedTeam
                   ? selectedTeam.description || 'Department discussion channel'
                   : `${selectedUser?.title || selectedUser?.role} • Direct Message`}

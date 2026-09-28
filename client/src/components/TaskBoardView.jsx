@@ -22,6 +22,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' or 'list'
   const [scope, setScope] = useState(user?.role === 'employee' ? 'mine' : 'all'); // 'mine' or 'all'
+  const [mobileKanbanCol, setMobileKanbanCol] = useState('all'); // 'all' or column key for mobile
   
   // Filters
   const [search, setSearch] = useState('');
@@ -239,21 +240,63 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
 
       {/* KANBAN BOARD VIEW */}
       {viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {columns.map((col) => {
-            const colTasks = tasks.filter((t) => t.status === col.key);
-            return (
-              <div key={col.key} className="flex flex-col bg-slate-100/70 p-3.5 rounded-3xl min-h-[500px]">
-                
-                {/* Column Header */}
-                <div className="flex items-center justify-between px-2 py-1.5 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-slate-800 uppercase tracking-wider">{col.label}</span>
-                    <span className={`text-[11px] font-bold px-2 py-0.2 rounded-full ${col.badgeBg}`}>
-                      {colTasks.length}
-                    </span>
-                  </div>
-                </div>
+        <div className="space-y-4">
+          {/* Mobile Quick Column Selector Tabs */}
+          <div className="flex md:hidden overflow-x-auto pb-1 gap-1.5 no-scrollbar">
+            <button
+              onClick={() => setMobileKanbanCol('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
+                mobileKanbanCol === 'all'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              All Columns ({tasks.length})
+            </button>
+            {columns.map((c) => {
+              const count = tasks.filter((t) => t.status === c.key).length;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setMobileKanbanCol(c.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+                    mobileKanbanCol === c.key
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  <span>{c.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    mobileKanbanCol === c.key ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Kanban Columns (Horizontal snap-scroll on mobile, 4-col grid on desktop) */}
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-5 md:overflow-visible pb-4">
+            {columns
+              .filter((col) => mobileKanbanCol === 'all' || mobileKanbanCol === col.key)
+              .map((col) => {
+                const colTasks = tasks.filter((t) => t.status === col.key);
+                return (
+                  <div
+                    key={col.key}
+                    className="w-[85vw] max-w-[340px] shrink-0 snap-center md:w-auto md:max-w-none flex flex-col bg-slate-100/70 p-3.5 rounded-3xl min-h-[480px]"
+                  >
+                    
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between px-2 py-1.5 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-800 uppercase tracking-wider">{col.label}</span>
+                        <span className={`text-[11px] font-bold px-2 py-0.2 rounded-full ${col.badgeBg}`}>
+                          {colTasks.length}
+                        </span>
+                      </div>
+                    </div>
 
                 {/* Task Cards Column */}
                 <div className="space-y-3 flex-1 overflow-y-auto">
@@ -352,88 +395,155 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
-      {/* LIST TABLE VIEW */}
+      {/* LIST TABLE VIEW (Responsive Cards on Mobile, Full Table on Desktop) */}
       {viewMode === 'list' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                <tr>
-                  <th className="py-3.5 px-6">Task Title</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Priority</th>
-                  <th className="py-3.5 px-4">Assignee</th>
-                  <th className="py-3.5 px-4">Due Date</th>
-                  <th className="py-3.5 px-4 text-center">Progress</th>
-                  <th className="py-3.5 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {tasks.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => onSelectTask(t.id)}
-                    className="hover:bg-slate-50 cursor-pointer transition-colors"
-                  >
-                    <td className="py-4 px-6 max-w-xs">
-                      <div>
-                        <span className="font-bold text-slate-900 text-sm block truncate">{t.title}</span>
-                        {t.rejection_status === 'requested' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
-                            <ShieldAlert className="w-3 h-3 text-amber-600" />
-                            Reassignment Requested
-                          </span>
-                        )}
-                      </div>
-                    </td>
+        <div className="space-y-4">
+          {/* Mobile Card View (md:hidden) */}
+          <div className="md:hidden space-y-3">
+            {tasks.length === 0 ? (
+              <div className="bg-white p-8 rounded-3xl border border-slate-200 text-center text-xs text-slate-400">
+                No deliverables found matching your criteria.
+              </div>
+            ) : (
+              tasks.map((t) => (
+                <div
+                  key={t.id}
+                  onClick={() => onSelectTask(t.id)}
+                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3 active:scale-[0.99] transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {getPriorityBadge(t.priority)}
+                      <span className="text-[10px] text-slate-400">#{t.id}</span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      t.status === 'completed'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : t.status === 'in_progress'
+                        ? 'bg-blue-100 text-blue-700'
+                        : t.status === 'review'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {t.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                  </div>
 
-                    <td className="py-4 px-4">
-                      <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                        t.status === 'completed'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : t.status === 'in_progress'
-                          ? 'bg-blue-100 text-blue-700'
-                          : t.status === 'review'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {t.status.replace('_', ' ').toUpperCase()}
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">{t.title}</h3>
+                    {t.rejection_status === 'requested' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
+                        <ShieldAlert className="w-3 h-3 text-amber-600" />
+                        Reassignment Requested
                       </span>
-                    </td>
+                    )}
+                  </div>
 
-                    <td className="py-4 px-4">{getPriorityBadge(t.priority)}</td>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                        alt={t.assignee_name}
+                        className="w-6 h-6 rounded-md object-cover"
+                      />
+                      <span className="font-semibold text-slate-700 text-xs truncate max-w-[120px]">
+                        {t.assignee_name || 'Unassigned'}
+                      </span>
+                    </div>
 
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                          alt={t.assignee_name}
-                          className="w-6 h-6 rounded-md object-cover"
-                        />
-                        <span className="font-semibold text-slate-800">{t.assignee_name || 'Unassigned'}</span>
-                      </div>
-                    </td>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-700">{t.progress_pct || 0}%</span>
+                      <span className="text-indigo-600 font-bold text-xs">Details →</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
 
-                    <td className="py-4 px-4">
-                      <span className="text-slate-600">{t.due_date || 'None'}</span>
-                    </td>
-
-                    <td className="py-4 px-4 text-center">
-                      <span className="font-bold text-slate-800">{t.progress_pct || 0}%</span>
-                    </td>
-
-                    <td className="py-4 px-6 text-right">
-                      <button className="text-indigo-600 font-semibold hover:underline">
-                        Details →
-                      </button>
-                    </td>
+          {/* Desktop Table View (hidden md:block) */}
+          <div className="hidden md:block bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th className="py-3.5 px-6">Task Title</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4">Priority</th>
+                    <th className="py-3.5 px-4">Assignee</th>
+                    <th className="py-3.5 px-4">Due Date</th>
+                    <th className="py-3.5 px-4 text-center">Progress</th>
+                    <th className="py-3.5 px-6 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {tasks.map((t) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => onSelectTask(t.id)}
+                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <td className="py-4 px-6 max-w-xs">
+                        <div>
+                          <span className="font-bold text-slate-900 text-sm block truncate">{t.title}</span>
+                          {t.rejection_status === 'requested' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 border border-amber-200">
+                              <ShieldAlert className="w-3 h-3 text-amber-600" />
+                              Reassignment Requested
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-4 px-4">
+                        <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                          t.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : t.status === 'in_progress'
+                            ? 'bg-blue-100 text-blue-700'
+                            : t.status === 'review'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {t.status.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </td>
+
+                      <td className="py-4 px-4">{getPriorityBadge(t.priority)}</td>
+
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                            alt={t.assignee_name}
+                            className="w-6 h-6 rounded-md object-cover"
+                          />
+                          <span className="font-semibold text-slate-800">{t.assignee_name || 'Unassigned'}</span>
+                        </div>
+                      </td>
+
+                      <td className="py-4 px-4">
+                        <span className="text-slate-600">{t.due_date || 'None'}</span>
+                      </td>
+
+                      <td className="py-4 px-4 text-center">
+                        <span className="font-bold text-slate-800">{t.progress_pct || 0}%</span>
+                      </td>
+
+                      <td className="py-4 px-6 text-right">
+                        <button className="text-indigo-600 font-semibold hover:underline">
+                          Details →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

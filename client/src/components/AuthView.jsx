@@ -76,7 +76,7 @@ export default function AuthView() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
       
       {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -93,8 +93,8 @@ export default function AuthView() {
       </div>
 
       {/* Main Card */}
-      <div className="mt-7 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="bg-white py-8 px-6 sm:px-10 shadow-2xl rounded-3xl border border-slate-100">
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <div className="bg-white py-7 px-5 sm:px-10 shadow-2xl rounded-3xl border border-slate-100">
           
           {/* Mode Switch Tabs: Login & Registration */}
           <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
