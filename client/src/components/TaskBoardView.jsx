@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ArrowRight
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
   const { user, availableUsers, socket } = useAuth();
@@ -368,10 +369,11 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                           {/* Assignee & Due Date */}
                           <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
                             <div className="flex items-center gap-1.5">
-                              <img
-                                src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                                alt={t.assignee_name}
-                                className="w-5 h-5 rounded-full object-cover"
+                              <UserAvatar
+                                name={t.assignee_name}
+                                avatar={t.assignee_avatar}
+                                role={t.assignee_role}
+                                size="xs"
                               />
                               <span className="truncate max-w-[90px] font-medium text-slate-700">
                                 {t.assignee_name || 'Unassigned'}
@@ -445,10 +447,11 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                     <div className="flex items-center gap-2">
-                      <img
-                        src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                        alt={t.assignee_name}
-                        className="w-6 h-6 rounded-md object-cover"
+                      <UserAvatar
+                        name={t.assignee_name}
+                        avatar={t.assignee_avatar}
+                        role={t.assignee_role}
+                        size="xs"
                       />
                       <span className="font-semibold text-slate-700 text-xs truncate max-w-[120px]">
                         {t.assignee_name || 'Unassigned'}
@@ -517,10 +520,11 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
 
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
-                          <img
-                            src={t.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                            alt={t.assignee_name}
-                            className="w-6 h-6 rounded-md object-cover"
+                          <UserAvatar
+                            name={t.assignee_name}
+                            avatar={t.assignee_avatar}
+                            role={t.assignee_role}
+                            size="xs"
                           />
                           <span className="font-semibold text-slate-800">{t.assignee_name || 'Unassigned'}</span>
                         </div>

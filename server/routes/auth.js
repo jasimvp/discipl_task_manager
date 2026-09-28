@@ -30,18 +30,37 @@ router.post('/register', (req, res) => {
 
   const hashedPassword = bcrypt.hashSync(password, 10);
   
-  // Clean default avatars
-  const avatarPool = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80'
-  ];
-  const avatar = avatarPool[Math.floor(Math.random() * avatarPool.length)];
+// Generate static corporate SVG avatar based on name and role
+function generateStaticAvatar(name, role) {
+  const initials = (name || 'User')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'U';
+
+  let bg1 = '#4f46e5';
+  let bg2 = '#7c3aed';
+  if (role === 'founder') {
+    bg1 = '#7e22ce';
+    bg2 = '#9333ea';
+  } else if (role === 'team_lead') {
+    bg1 = '#2563eb';
+    bg2 = '#0284c7';
+  } else {
+    bg1 = '#059669';
+    bg2 = '#0d9488';
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${bg1}"/><stop offset="100%" stop-color="${bg2}"/></linearGradient></defs><rect width="100" height="100" rx="30" fill="url(#g)"/><text x="50" y="58" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="38" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
   const targetRole = role || 'employee';
+  const avatar = generateStaticAvatar(name, targetRole);
   const initialStatus = targetRole === 'founder' ? 'approved' : 'pending';
 
   const stmt = db.prepare(`
@@ -249,7 +268,7 @@ router.post('/invite-user', authMiddleware, requireRoles('founder'), (req, res) 
   }
 
   const hashedPassword = bcrypt.hashSync(password, 10);
-  const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+  const avatar = generateStaticAvatar(name, role);
 
   const result = db.prepare(`
     INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)

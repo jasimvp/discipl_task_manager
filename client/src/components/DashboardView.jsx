@@ -20,6 +20,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import DisciplLogo from './DisciplLogo';
+import UserAvatar from './UserAvatar';
 
 export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelectTask }) {
   const { user, socket } = useAuth();
@@ -474,10 +475,11 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                     <div key={emp.id} className={`p-4 space-y-3 ${isSelectedUser ? 'bg-indigo-50/20' : ''}`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
-                          <img
-                            src={emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                            alt={emp.name}
-                            className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
+                          <UserAvatar
+                            name={emp.name}
+                            avatar={emp.avatar}
+                            role={emp.role}
+                            size="md"
                           />
                           <div>
                             <div className="flex items-center gap-1.5">
@@ -573,10 +575,11 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                         >
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-3">
-                              <img
-                                src={emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                                alt={emp.name}
-                                className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
+                              <UserAvatar
+                                name={emp.name}
+                                avatar={emp.avatar}
+                                role={emp.role}
+                                size="md"
                               />
                               <div>
                                 <div className="flex items-center gap-2">

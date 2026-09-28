@@ -11,6 +11,7 @@ import {
   Mail, 
   Briefcase 
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser }) {
   const { user, availableUsers } = useAuth();
@@ -78,10 +79,11 @@ export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser 
                 {/* Header with Avatar and Role */}
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                      alt={emp.name}
-                      className="w-12 h-12 rounded-2xl object-cover ring-2 ring-slate-100"
+                    <UserAvatar
+                      name={emp.name}
+                      avatar={emp.avatar}
+                      role={emp.role}
+                      size="lg"
                     />
                     <div>
                       <div className="flex items-center gap-1.5">

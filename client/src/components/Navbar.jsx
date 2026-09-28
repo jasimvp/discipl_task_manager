@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import DisciplLogo from './DisciplLogo';
+import UserAvatar from './UserAvatar';
 
 export default function Navbar({ activeTab, setActiveTab }) {
   const { user, logout, socket } = useAuth();
@@ -283,12 +284,13 @@ export default function Navbar({ activeTab, setActiveTab }) {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-all text-left bg-white shadow-2xs"
+                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-all text-left bg-white shadow-2xs"
               >
-                <img
-                  src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                  alt={user?.name}
-                  className="w-8 h-8 rounded-xl object-cover ring-2 ring-slate-100"
+                <UserAvatar
+                  name={user?.name}
+                  avatar={user?.avatar}
+                  role={user?.role}
+                  size="sm"
                 />
                 <div className="hidden sm:block">
                   <div className="flex items-center gap-1.5">
@@ -343,10 +345,11 @@ export default function Navbar({ activeTab, setActiveTab }) {
         <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-5 space-y-2 animate-in slide-in-from-top-3 duration-200 shadow-xl">
           <div className="p-3 bg-slate-50 rounded-2xl mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img
-                src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                alt={user?.name}
-                className="w-10 h-10 rounded-xl object-cover ring-2 ring-white"
+              <UserAvatar
+                name={user?.name}
+                avatar={user?.avatar}
+                role={user?.role}
+                size="md"
               />
               <div>
                 <p className="text-xs font-bold text-slate-900">{user?.name}</p>

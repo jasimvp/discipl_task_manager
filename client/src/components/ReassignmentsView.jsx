@@ -12,6 +12,7 @@ import {
   Info,
   Calendar
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function ReassignmentsView({ onSelectTask }) {
   const { user, availableUsers } = useAuth();
@@ -188,10 +189,11 @@ export default function ReassignmentsView({ onSelectTask }) {
                 <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4">
                   <div className="flex items-center justify-between text-xs mb-1.5">
                     <div className="flex items-center gap-2">
-                      <img
-                        src={task.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                        alt={task.assignee_name}
-                        className="w-5 h-5 rounded-full object-cover"
+                      <UserAvatar
+                        name={task.assignee_name}
+                        avatar={task.assignee_avatar}
+                        role={task.assignee_role}
+                        size="xs"
                       />
                       <span className="font-bold text-amber-950">
                         {task.assignee_name} ({task.assignee_title || 'Employee'}):

@@ -16,6 +16,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function AccessRequestsView() {
   const { user, refreshUsers, socket } = useAuth();
@@ -220,10 +221,11 @@ export default function AccessRequestsView() {
             {requests.map((req) => (
               <div key={req.id} className="p-5 hover:bg-slate-50/70 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5">
-                  <img
-                    src={req.avatar}
-                    alt={req.name}
-                    className="w-11 h-11 rounded-2xl object-cover ring-2 ring-slate-100"
+                  <UserAvatar
+                    name={req.name}
+                    avatar={req.avatar}
+                    role={req.role}
+                    size="lg"
                   />
                   <div>
                     <div className="flex items-center gap-2">
@@ -307,10 +309,11 @@ export default function AccessRequestsView() {
                   <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3.5 px-6">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={m.avatar}
-                          alt={m.name}
-                          className="w-8 h-8 rounded-xl object-cover ring-2 ring-slate-100"
+                        <UserAvatar
+                          name={m.name}
+                          avatar={m.avatar}
+                          role={m.role}
+                          size="sm"
                         />
                         <div>
                           <div className="flex items-center gap-1.5">

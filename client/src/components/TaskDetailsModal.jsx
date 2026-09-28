@@ -14,6 +14,7 @@ import {
   Trash2,
   Check
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdated }) {
   const { user, availableUsers } = useAuth();
@@ -361,10 +362,11 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             <div>
               <span className="text-slate-400 block text-[11px] mb-1">Assigned To</span>
               <div className="flex items-center gap-2">
-                <img
-                  src={task?.assignee_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                  alt={task?.assignee_name}
-                  className="w-6 h-6 rounded-md object-cover"
+                <UserAvatar
+                  name={task?.assignee_name}
+                  avatar={task?.assignee_avatar}
+                  role={task?.assignee_role}
+                  size="xs"
                 />
                 <div>
                   <span className="font-bold text-slate-800">{task?.assignee_name || 'Unassigned'}</span>

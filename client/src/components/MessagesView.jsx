@@ -15,6 +15,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import UserAvatar from './UserAvatar';
 
 export default function MessagesView({ initialUserId }) {
   const { user, availableUsers } = useAuth();
@@ -262,14 +263,13 @@ export default function MessagesView({ initialUserId }) {
                           : 'text-slate-700 hover:bg-slate-200/60 font-medium'
                       }`}
                     >
-                      <div className="relative shrink-0">
-                        <img
-                          src={u.avatar}
-                          alt={u.name}
-                          className="w-8 h-8 rounded-xl object-cover ring-2 ring-white"
-                        />
-                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
-                      </div>
+                      <UserAvatar
+                        name={u.name}
+                        avatar={u.avatar}
+                        role={u.role}
+                        size="sm"
+                        statusIndicator={true}
+                      />
                       <div className="flex-1 truncate">
                         <div className="flex items-center justify-between">
                           <p className="truncate font-semibold">{u.name}</p>
@@ -310,10 +310,11 @@ export default function MessagesView({ initialUserId }) {
                 <Hash className="w-5 h-5" />
               </div>
             ) : (
-              <img
-                src={selectedUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                alt={selectedUser?.name}
-                className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100 shrink-0"
+              <UserAvatar
+                name={selectedUser?.name}
+                avatar={selectedUser?.avatar}
+                role={selectedUser?.role}
+                size="md"
               />
             )}
             <div className="truncate">
@@ -349,10 +350,12 @@ export default function MessagesView({ initialUserId }) {
                     isMe ? 'ml-auto flex-row-reverse' : ''
                   }`}
                 >
-                  <img
-                    src={msg.sender_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                    alt={msg.sender_name}
-                    className="w-7 h-7 rounded-lg object-cover ring-1 ring-slate-200 shrink-0 mt-0.5"
+                  <UserAvatar
+                    name={msg.sender_name}
+                    avatar={msg.sender_avatar}
+                    role={msg.sender_role}
+                    size="xs"
+                    className="mt-0.5"
                   />
                   <div>
                     <div className={`flex items-center gap-1.5 mb-1 ${isMe ? 'justify-end' : ''}`}>
