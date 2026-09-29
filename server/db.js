@@ -1,10 +1,15 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const dotenv = require('dotenv');
+const fs = require('fs');
 
 dotenv.config();
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'taskmanager.db');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
 const db = new Database(dbPath);
 
 // Enable foreign keys and WAL mode for better concurrency in production

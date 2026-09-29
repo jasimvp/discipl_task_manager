@@ -3,7 +3,7 @@
 # ==========================================
 
 # 1. Build Client Frontend
-FROM node:20-bookworm-slim AS client-builder
+FROM node:22-bookworm-slim AS client-builder
 WORKDIR /app
 
 COPY client/package*.json ./client/
@@ -13,7 +13,7 @@ COPY client/ ./client/
 RUN npm run build --prefix client
 
 # 2. Production Runtime
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
