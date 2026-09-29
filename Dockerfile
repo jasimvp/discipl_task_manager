@@ -7,7 +7,7 @@ FROM node:20-bookworm-slim AS client-builder
 WORKDIR /app
 
 COPY client/package*.json ./client/
-RUN npm ci --prefix client
+RUN npm install --prefix client
 
 COPY client/ ./client/
 RUN npm run build --prefix client
@@ -19,9 +19,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Install production server dependencies
+# Install build tools required by native better-sqlite3 module on Linux
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install server dependencies
 COPY server/package*.json ./server/
-RUN npm ci --prefix server --omit=dev
+RUN npm install --prefix server --omit=dev
 
 # Copy server application
 COPY server/ ./server/

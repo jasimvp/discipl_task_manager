@@ -1,17 +1,19 @@
 {
-  "name": "task_manager",
+  "name": "discipl-task-manager",
   "version": "1.0.0",
   "description": "Discipl Task & Deliverables Management Workspace",
   "main": "server/index.js",
   "scripts": {
-    "postinstall": "npm install --prefix server && npm install --prefix client",
-    "build": "npm run build --prefix client",
+    "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client",
     "start": "node server/index.js",
     "server": "node server/index.js",
     "client": "npm run dev --prefix client",
     "dev": "npx concurrently \"npm run server\" \"npm run client\""
   },
-  "keywords": ["task-manager", "react", "express", "sqlite"],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": ["task-manager", "react", "express", "sqlite", "discipl"],
   "author": "",
   "license": "ISC",
   "type": "commonjs"
