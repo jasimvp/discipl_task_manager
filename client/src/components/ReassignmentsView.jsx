@@ -119,30 +119,30 @@ export default function ReassignmentsView({ onSelectTask }) {
       )}
 
       {/* Main List */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-6 border-b border-slate-100">
-          <h2 className="font-bold text-base text-slate-900">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+          <h2 className="font-bold text-base text-slate-900 dark:text-white">
             Active Reassignment Submissions ({tasks.length})
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Review the rationale submitted by the employee and allocate the task to the right specialist.
           </p>
         </div>
 
         {tasks.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+            <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8 stroke-[1.8]" />
             </div>
-            <h3 className="font-bold text-slate-800 text-sm">No Pending Reassignment Requests!</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
+            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">No Pending Reassignment Requests!</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               All tasks are correctly assigned and in progress. If an employee flags a wrongly assigned task, it will appear here immediately.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {tasks.map((task) => (
-              <div key={task.id} className="p-6 hover:bg-slate-50/70 transition-colors space-y-4">
+              <div key={task.id} className="p-6 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
@@ -155,22 +155,22 @@ export default function ReassignmentsView({ onSelectTask }) {
                       }`}>
                         {task.priority} Priority
                       </span>
-                      <span className="text-xs font-bold text-slate-400">Task #{task.id}</span>
+                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500">Task #{task.id}</span>
                       {task.due_date && (
-                        <span className="text-xs text-slate-500 flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-400" />
+                        <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                           Due: {task.due_date}
                         </span>
                       )}
                     </div>
-                    <h3 className="text-base font-bold text-slate-900 mt-1">{task.title}</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1">{task.title}</h3>
                   </div>
 
                   {canManage && (
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => handleDeclineRequest(task.id)}
-                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition-colors"
                       >
                         Decline
                       </button>
@@ -186,7 +186,7 @@ export default function ReassignmentsView({ onSelectTask }) {
                 </div>
 
                 {/* Reassignment Reason Quote Box */}
-                <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4">
+                <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-2xl p-4">
                   <div className="flex items-center justify-between text-xs mb-1.5">
                     <div className="flex items-center gap-2">
                       <UserAvatar
@@ -195,25 +195,25 @@ export default function ReassignmentsView({ onSelectTask }) {
                         role={task.assignee_role}
                         size="xs"
                       />
-                      <span className="font-bold text-amber-950">
+                      <span className="font-bold text-amber-950 dark:text-amber-200">
                         {task.assignee_name} ({task.assignee_title || 'Employee'}):
                       </span>
                     </div>
-                    <span className="text-[10px] text-amber-700">
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400">
                       {task.rejected_at ? new Date(task.rejected_at).toLocaleString() : 'Recently'}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-900 font-medium italic pl-7">
+                  <p className="text-xs text-amber-900 dark:text-amber-300 font-medium italic pl-7">
                     "{task.rejection_reason}"
                   </p>
                 </div>
 
                 {/* Additional task details footer */}
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  <span>Assigned originally by: <strong className="text-slate-700">{task.creator_name}</strong></span>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span>Assigned originally by: <strong className="text-slate-700 dark:text-slate-300">{task.creator_name}</strong></span>
                   <button
                     onClick={() => onSelectTask(task.id)}
-                    className="text-indigo-600 font-semibold hover:underline"
+                    className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
                   >
                     View Task Details Modal →
                   </button>
@@ -227,15 +227,15 @@ export default function ReassignmentsView({ onSelectTask }) {
       {/* Quick Reassign Dialog */}
       {selectedTaskForReassign && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Reassign Task</h3>
-                <p className="text-[11px] text-slate-500 truncate max-w-xs">{selectedTaskForReassign.title}</p>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">Reassign Task</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs">{selectedTaskForReassign.title}</p>
               </div>
               <button
                 onClick={() => setSelectedTaskForReassign(null)}
-                className="text-slate-400 hover:text-slate-600 text-xs"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
               >
                 ✕
               </button>
@@ -243,14 +243,14 @@ export default function ReassignmentsView({ onSelectTask }) {
 
             <form onSubmit={handleConfirmReassign} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Select Target Employee *
                 </label>
                 <select
                   value={newAssigneeId}
                   onChange={(e) => setNewAssigneeId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:border-indigo-500 bg-white"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:border-indigo-500"
                 >
                   <option value="">Choose Employee...</option>
                   {availableUsers
@@ -264,7 +264,7 @@ export default function ReassignmentsView({ onSelectTask }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Reassignment Note for New Employee (Optional)
                 </label>
                 <input
@@ -272,15 +272,15 @@ export default function ReassignmentsView({ onSelectTask }) {
                   placeholder="e.g. Please take over this deliverable..."
                   value={reassignNote}
                   onChange={(e) => setReassignNote(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs focus:border-indigo-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setSelectedTaskForReassign(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </button>

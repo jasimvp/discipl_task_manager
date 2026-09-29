@@ -3,6 +3,65 @@ const router = express.Router();
 const { db } = require('../db');
 const { authMiddleware } = require('../auth');
 
+// Helper to get all assignees for a task
+function getTaskAssignees(taskId) {
+  try {
+    return db.prepare(`
+      SELECT u.id, u.name, u.email, u.role, u.title, u.avatar
+      FROM task_assignees ta
+      JOIN users u ON ta.user_id = u.id
+      WHERE ta.task_id = ?
+    `).all(taskId);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Helper to enrich task with assignees and claim lock details
+function enrichTask(task) {
+  if (!task) return null;
+  const assignees = getTaskAssignees(task.id);
+  // Ensure primary assignee is in the list
+  if (task.assigned_to && !assignees.some((a) => a.id === task.assigned_to)) {
+    const primary = db.prepare('SELECT id, name, email, role, title, avatar FROM users WHERE id = ?').get(task.assigned_to);
+    if (primary) assignees.unshift(primary);
+  }
+
+  let claimed_by_name = null;
+  let claimed_by_avatar = null;
+  if (task.claimed_by) {
+    const claimer = db.prepare('SELECT name, avatar FROM users WHERE id = ?').get(task.claimed_by);
+    if (claimer) {
+      claimed_by_name = claimer.name;
+      claimed_by_avatar = claimer.avatar;
+    }
+  }
+
+  return {
+    ...task,
+    assignees,
+    claimed_by_name,
+    claimed_by_avatar,
+  };
+}
+
+// Helper to get full task with all details
+function getFullTask(taskId) {
+  const task = db.prepare(`
+    SELECT t.*,
+           assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role, assignee.title as assignee_title, assignee.email as assignee_email,
+           creator.name as creator_name, creator.avatar as creator_avatar,
+           tm.name as team_name
+    FROM tasks t
+    LEFT JOIN users assignee ON t.assigned_to = assignee.id
+    LEFT JOIN users creator ON t.assigned_by = creator.id
+    LEFT JOIN teams tm ON t.team_id = tm.id
+    WHERE t.id = ?
+  `).get(taskId);
+
+  return enrichTask(task);
+}
+
 // Helper to record activity
 function recordActivity(taskId, userId, activityType, details) {
   try {
@@ -45,24 +104,24 @@ router.get('/', authMiddleware, (req, res) => {
   `;
   const params = [];
 
-  // Role-based visibility:
+  // Multi-assignee role-based visibility:
   if (user.role === 'employee') {
     if (assigned_to) {
-      query += ` AND t.assigned_to = ?`;
-      params.push(assigned_to);
+      query += ` AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))`;
+      params.push(assigned_to, assigned_to);
     } else {
-      query += ` AND (t.assigned_to = ? OR t.team_id = ?)`;
-      params.push(user.id, user.team_id || 0);
+      query += ` AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?) OR t.team_id = ?)`;
+      params.push(user.id, user.id, user.team_id || 0);
     }
   } else if (user.role === 'team_lead') {
     if (assigned_to) {
-      query += ` AND t.assigned_to = ?`;
-      params.push(assigned_to);
+      query += ` AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))`;
+      params.push(assigned_to, assigned_to);
     }
   } else if (user.role === 'founder') {
     if (assigned_to) {
-      query += ` AND t.assigned_to = ?`;
-      params.push(assigned_to);
+      query += ` AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))`;
+      params.push(assigned_to, assigned_to);
     }
   }
 
@@ -102,22 +161,13 @@ router.get('/', authMiddleware, (req, res) => {
     t.due_date ASC, t.created_at DESC`;
 
   const tasks = db.prepare(query).all(...params);
-  res.json(tasks);
+  const enrichedTasks = tasks.map(enrichTask);
+  res.json(enrichedTasks);
 });
 
 // GET single task by ID
 router.get('/:id', authMiddleware, (req, res) => {
-  const task = db.prepare(`
-    SELECT t.*,
-           assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role, assignee.title as assignee_title, assignee.email as assignee_email,
-           creator.name as creator_name, creator.avatar as creator_avatar,
-           tm.name as team_name
-    FROM tasks t
-    LEFT JOIN users assignee ON t.assigned_to = assignee.id
-    LEFT JOIN users creator ON t.assigned_by = creator.id
-    LEFT JOIN teams tm ON t.team_id = tm.id
-    WHERE t.id = ?
-  `).get(req.params.id);
+  const task = getFullTask(req.params.id);
 
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
@@ -144,21 +194,31 @@ router.get('/:id', authMiddleware, (req, res) => {
   res.json({ ...task, activities, comments });
 });
 
-// CREATE task (Founders and Team Leads)
+// CREATE task (Founders and Team Leads) - Supports multi-assignee
 router.post('/', authMiddleware, (req, res) => {
   const user = req.user;
   if (user.role !== 'founder' && user.role !== 'team_lead') {
     return res.status(403).json({ error: 'Only Founders and Team Leaders can assign tasks' });
   }
 
-  const { title, description, priority, assigned_to, team_id, due_date } = req.body;
+  const { title, description, priority, assigned_to, assigned_to_ids, team_id, due_date } = req.body;
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Task title is required' });
   }
 
+  // Build assignee list
+  let assigneesList = [];
+  if (Array.isArray(assigned_to_ids) && assigned_to_ids.length > 0) {
+    assigneesList = assigned_to_ids.map(Number).filter(Boolean);
+  } else if (assigned_to) {
+    assigneesList = [Number(assigned_to)];
+  }
+
+  const primaryAssignee = assigneesList[0] || null;
+
   let finalTeamId = team_id;
-  if (!finalTeamId && assigned_to) {
-    const assignee = db.prepare('SELECT team_id FROM users WHERE id = ?').get(assigned_to);
+  if (!finalTeamId && primaryAssignee) {
+    const assignee = db.prepare('SELECT team_id FROM users WHERE id = ?').get(primaryAssignee);
     if (assignee) finalTeamId = assignee.team_id;
   }
 
@@ -171,7 +231,7 @@ router.post('/', authMiddleware, (req, res) => {
     title.trim(),
     description || '',
     priority || 'medium',
-    assigned_to || null,
+    primaryAssignee,
     user.id,
     finalTeamId || null,
     due_date || null
@@ -179,29 +239,25 @@ router.post('/', authMiddleware, (req, res) => {
 
   const taskId = result.lastInsertRowid;
 
-  // Record activity
-  recordActivity(taskId, user.id, 'task_created', `Task created and assigned by ${user.name}`);
-
-  // Notify assignee
-  if (assigned_to && assigned_to !== user.id) {
-    addNotification(
-      assigned_to,
-      'New Task Assigned',
-      `${user.name} assigned you a new task: "${title.trim()}"`,
-      'task_assigned',
-      taskId
-    );
+  // Insert all assignees into task_assignees
+  const insertAssigneeStmt = db.prepare('INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)');
+  for (const uid of assigneesList) {
+    insertAssigneeStmt.run(taskId, uid);
+    if (uid !== user.id) {
+      addNotification(
+        uid,
+        'New Deliverable Assigned',
+        `${user.name} assigned you a deliverable: "${title.trim()}"`,
+        'task_assigned',
+        taskId
+      );
+    }
   }
 
-  const newTask = db.prepare(`
-    SELECT t.*,
-           assignee.name as assignee_name, assignee.avatar as assignee_avatar,
-           creator.name as creator_name
-    FROM tasks t
-    LEFT JOIN users assignee ON t.assigned_to = assignee.id
-    LEFT JOIN users creator ON t.assigned_by = creator.id
-    WHERE t.id = ?
-  `).get(taskId);
+  // Record activity
+  recordActivity(taskId, user.id, 'task_created', `Task created with ${assigneesList.length} assignee(s) by ${user.name}`);
+
+  const newTask = getFullTask(taskId);
 
   // Real-time broadcast
   if (req.io) {
@@ -211,7 +267,112 @@ router.post('/', authMiddleware, (req, res) => {
   res.status(201).json(newTask);
 });
 
-// UPDATE task status / progress
+// CLAIM / START TASK - Concurrency Lock to prevent duplicate work!
+router.post('/:id/claim', authMiddleware, (req, res) => {
+  const taskId = req.params.id;
+  const user = req.user;
+
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  if (task.status === 'completed') {
+    return res.status(400).json({ error: 'This task is already completed.' });
+  }
+
+  // Check if another teammate has already locked / claimed this task
+  if (task.claimed_by && task.claimed_by !== user.id && task.status === 'in_progress') {
+    const claimer = db.prepare('SELECT name FROM users WHERE id = ?').get(task.claimed_by);
+    return res.status(409).json({
+      error: `Task is currently in progress by ${claimer?.name || 'another team member'}. To prevent duplicate work, please coordinate with them.`
+    });
+  }
+
+  // Lock task under current user
+  db.prepare(`
+    UPDATE tasks
+    SET claimed_by = ?,
+        claimed_at = CURRENT_TIMESTAMP,
+        status = 'in_progress',
+        progress_pct = CASE WHEN progress_pct = 0 THEN 20 ELSE progress_pct END,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(user.id, taskId);
+
+  recordActivity(taskId, user.id, 'task_claimed', `${user.name} started working on this deliverable (Locked for concurrent work)`);
+
+  // Add system discussion comment
+  try {
+    db.prepare(`
+      INSERT INTO task_comments (task_id, user_id, content)
+      VALUES (?, ?, ?)
+    `).run(taskId, user.id, `🚀 Started working on this deliverable. Concurrent work lock active.`);
+  } catch (e) {}
+
+  // Notify other assignees so they know work has started
+  const otherAssignees = db.prepare('SELECT user_id FROM task_assignees WHERE task_id = ? AND user_id != ?').all(taskId, user.id);
+  for (const a of otherAssignees) {
+    addNotification(
+      a.user_id,
+      'Teammate Started Deliverable',
+      `${user.name} started working on "${task.title}".`,
+      'task_started',
+      taskId
+    );
+  }
+
+  const updatedTask = getFullTask(taskId);
+
+  if (req.io) {
+    req.io.emit('task_updated', updatedTask);
+    req.io.emit('task_claimed', { taskId: Number(taskId), claimed_by: user.id, claimed_by_name: user.name });
+  }
+
+  res.json({ message: 'Task started and claimed! Teammates have been notified.', task: updatedTask });
+});
+
+// RELEASE CLAIM - Worker pauses or releases claim for teammates
+router.post('/:id/release-claim', authMiddleware, (req, res) => {
+  const taskId = req.params.id;
+  const user = req.user;
+
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  if (task.claimed_by !== user.id && user.role !== 'founder' && user.role !== 'team_lead') {
+    return res.status(403).json({ error: 'Only the active worker or a manager can release this task.' });
+  }
+
+  db.prepare(`
+    UPDATE tasks
+    SET claimed_by = NULL,
+        claimed_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(taskId);
+
+  recordActivity(taskId, user.id, 'claim_released', `${user.name} paused/released active lock on this deliverable.`);
+
+  try {
+    db.prepare(`
+      INSERT INTO task_comments (task_id, user_id, content)
+      VALUES (?, ?, ?)
+    `).run(taskId, user.id, `⏸️ Active work paused. Deliverable unlocked for other assignees.`);
+  } catch (e) {}
+
+  const updatedTask = getFullTask(taskId);
+
+  if (req.io) {
+    req.io.emit('task_updated', updatedTask);
+  }
+
+  res.json({ message: 'Task claim released.', task: updatedTask });
+});
+
+// UPDATE task status / progress - Synced completion across all assignees!
 router.put('/:id', authMiddleware, (req, res) => {
   const taskId = req.params.id;
   const user = req.user;
@@ -221,7 +382,9 @@ router.put('/:id', authMiddleware, (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const isAssignee = task.assigned_to === user.id;
+  // Check if user is an assignee
+  const isAssignee = task.assigned_to === user.id || 
+    Boolean(db.prepare('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?').get(taskId, user.id));
   const isCreator = task.assigned_by === user.id;
   const isFounder = user.role === 'founder';
   const isLead = user.role === 'team_lead';
@@ -230,7 +393,15 @@ router.put('/:id', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Not authorized to modify this task' });
   }
 
-  const { status, progress_pct, title, description, priority, due_date, deliverable_url, deliverable_notes } = req.body;
+  // Race-condition prevention: If someone else locked it in progress, other assignees cannot modify progress without claiming
+  if (task.claimed_by && task.claimed_by !== user.id && task.status === 'in_progress' && !isFounder && !isLead) {
+    const claimer = db.prepare('SELECT name FROM users WHERE id = ?').get(task.claimed_by);
+    return res.status(409).json({
+      error: `Conflict: This task is actively locked by ${claimer?.name || 'another assignee'}. Only the active worker or a manager can update it.`
+    });
+  }
+
+  const { status, progress_pct, title, description, priority, due_date, deliverable_url, deliverable_notes, assigned_to_ids } = req.body;
   let newStatus = status || task.status;
   let newProgress = progress_pct !== undefined ? Number(progress_pct) : task.progress_pct;
 
@@ -242,6 +413,14 @@ router.put('/:id', authMiddleware, (req, res) => {
     newStatus = 'in_progress';
   }
 
+  // If status is moved to in_progress and no claimer set yet, claim it for this user
+  let newClaimedBy = task.claimed_by;
+  let newClaimedAt = task.claimed_at;
+  if (newStatus === 'in_progress' && !newClaimedBy) {
+    newClaimedBy = user.id;
+    newClaimedAt = new Date().toISOString();
+  }
+
   const newTitle = (isFounder || isLead || isCreator) && title ? title : task.title;
   const newDesc = (isFounder || isLead || isCreator) && description !== undefined ? description : task.description;
   const newPriority = (isFounder || isLead || isCreator) && priority ? priority : task.priority;
@@ -251,21 +430,41 @@ router.put('/:id', authMiddleware, (req, res) => {
 
   db.prepare(`
     UPDATE tasks
-    SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, progress_pct = ?, deliverable_url = ?, deliverable_notes = ?, updated_at = CURRENT_TIMESTAMP
+    SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, progress_pct = ?, deliverable_url = ?, deliverable_notes = ?, claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(newTitle, newDesc, newStatus, newPriority, newDueDate, newProgress, newDeliverableUrl, newDeliverableNotes, taskId);
+  `).run(newTitle, newDesc, newStatus, newPriority, newDueDate, newProgress, newDeliverableUrl, newDeliverableNotes, newClaimedBy, newClaimedAt, taskId);
+
+  // If assigned_to_ids was updated by manager
+  if (Array.isArray(assigned_to_ids) && (isFounder || isLead)) {
+    db.prepare('DELETE FROM task_assignees WHERE task_id = ?').run(taskId);
+    const ins = db.prepare('INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)');
+    for (const uid of assigned_to_ids) {
+      ins.run(taskId, Number(uid));
+    }
+    if (assigned_to_ids[0]) {
+      db.prepare('UPDATE tasks SET assigned_to = ? WHERE id = ?').run(Number(assigned_to_ids[0]), taskId);
+    }
+  }
 
   if (task.status !== newStatus) {
     recordActivity(taskId, user.id, 'status_changed', `Status updated from ${task.status} to ${newStatus}`);
     
-    if (newStatus === 'completed' && task.assigned_by !== user.id) {
-      addNotification(
-        task.assigned_by,
-        'Task Completed!',
-        `${user.name} marked "${task.title}" as completed.`,
-        'task_completed',
-        taskId
-      );
+    // When completed, notify all assignees and creator!
+    if (newStatus === 'completed') {
+      const allAssignees = db.prepare('SELECT user_id FROM task_assignees WHERE task_id = ?').all(taskId);
+      const recipientIds = new Set(allAssignees.map(a => a.user_id));
+      if (task.assigned_by) recipientIds.add(task.assigned_by);
+      recipientIds.delete(user.id);
+
+      for (const rid of recipientIds) {
+        addNotification(
+          rid,
+          'Deliverable Completed! ✅',
+          `${user.name} completed "${task.title}". Synced across all assignees!`,
+          'task_completed',
+          taskId
+        );
+      }
     }
   }
 
@@ -277,15 +476,7 @@ router.put('/:id', authMiddleware, (req, res) => {
     recordActivity(taskId, user.id, 'deliverable_attached', `${user.name} attached deliverable link: ${deliverable_url}`);
   }
 
-  const updatedTask = db.prepare(`
-    SELECT t.*,
-           assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role,
-           creator.name as creator_name
-    FROM tasks t
-    LEFT JOIN users assignee ON t.assigned_to = assignee.id
-    LEFT JOIN users creator ON t.assigned_by = creator.id
-    WHERE t.id = ?
-  `).get(taskId);
+  const updatedTask = getFullTask(taskId);
 
   // Real-time broadcast
   if (req.io) {

@@ -1,14 +1,15 @@
 {
   "name": "task_manager",
   "version": "1.0.0",
-  "description": "Enterprise Task Manager with RBAC, Reassignments, Status Tracking & Realtime Messaging",
+  "description": "Discipl Task & Deliverables Management Workspace",
   "main": "server/index.js",
   "scripts": {
+    "postinstall": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix client",
     "start": "node server/index.js",
     "server": "node server/index.js",
     "client": "npm run dev --prefix client",
-    "dev": "npx concurrently \"npm run server\" \"npm run client\"",
-    "build": "npm run build --prefix client"
+    "dev": "npx concurrently \"npm run server\" \"npm run client\""
   },
   "keywords": ["task-manager", "react", "express", "sqlite"],
   "author": "",

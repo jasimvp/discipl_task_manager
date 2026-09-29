@@ -50,7 +50,8 @@ export default function MessagesView({ initialUserId }) {
 
   // Initialize Socket.io
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const socketUrl = window.location.port === '5173' ? 'http://localhost:5000' : window.location.origin;
+    const socket = io(socketUrl);
     socketRef.current = socket;
 
     if (user?.id) {
@@ -155,21 +156,21 @@ export default function MessagesView({ initialUserId }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-13rem)] min-h-[520px] md:h-[750px] flex flex-col md:flex-row mb-6">
+    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-[calc(100vh-13rem)] min-h-[520px] md:h-[750px] flex flex-col md:flex-row mb-6">
       
       {/* SIDEBAR: Channels & Direct Messages (Visible in 'list' mode on mobile, always visible on desktop) */}
-      <div className={`w-full md:w-80 border-r border-slate-200 bg-slate-50/70 flex flex-col shrink-0 ${
+      <div className={`w-full md:w-80 border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 flex flex-col shrink-0 ${
         mobileView === 'chat' ? 'hidden md:flex' : 'flex flex-1'
       }`}>
         
         {/* Header Tabs */}
-        <div className="p-4 border-b border-slate-200 bg-white">
-          <h2 className="font-bold text-base text-slate-900 mb-3 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-indigo-600" />
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <h2 className="font-bold text-base text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             Communication Hub
           </h2>
 
-          <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
             <button
               onClick={() => {
                 setActiveTab('teams');
@@ -179,7 +180,7 @@ export default function MessagesView({ initialUserId }) {
                 }
               }}
               className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'teams' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                activeTab === 'teams' ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -195,7 +196,7 @@ export default function MessagesView({ initialUserId }) {
                 }
               }}
               className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'direct' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                activeTab === 'direct' ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Circle className="w-3 h-3 text-emerald-500 fill-emerald-500" />
@@ -224,13 +225,13 @@ export default function MessagesView({ initialUserId }) {
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left text-xs transition-all ${
                       isSelected
                         ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20'
-                        : 'text-slate-700 hover:bg-slate-200/60 font-medium'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 font-medium'
                     }`}
                   >
-                    <Hash className={`w-4 h-4 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`} />
+                    <Hash className={`w-4 h-4 ${isSelected ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`} />
                     <div className="flex-1 truncate">
                       <p className="truncate">{t.name}</p>
-                      <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                      <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
                         {t.member_count} members • {t.task_count} tasks
                       </p>
                     </div>
@@ -260,7 +261,7 @@ export default function MessagesView({ initialUserId }) {
                       className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left text-xs transition-all ${
                         isSelected
                           ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20'
-                          : 'text-slate-700 hover:bg-slate-200/60 font-medium'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 font-medium'
                       }`}
                     >
                       <UserAvatar
@@ -275,7 +276,7 @@ export default function MessagesView({ initialUserId }) {
                           <p className="truncate font-semibold">{u.name}</p>
                           <span className="text-[10px] opacity-80">{u.role === 'founder' ? '👑' : u.role === 'team_lead' ? '🛡️' : '💼'}</span>
                         </div>
-                        <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
                           {u.title || u.role}
                         </p>
                       </div>
@@ -289,16 +290,16 @@ export default function MessagesView({ initialUserId }) {
       </div>
 
       {/* RIGHT PANE: Chat Conversation Feed (Visible in 'chat' mode on mobile, always visible on desktop) */}
-      <div className={`flex-1 flex flex-col bg-white ${
+      <div className={`flex-1 flex flex-col bg-white dark:bg-slate-900 ${
         mobileView === 'list' ? 'hidden md:flex' : 'flex'
       }`}>
         
         {/* Chat Top Bar with Back Button on Mobile */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileView('list')}
-              className="md:hidden p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 -ml-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="Back to Channels"
               aria-label="Back to channels list"
             >
@@ -306,7 +307,7 @@ export default function MessagesView({ initialUserId }) {
             </button>
 
             {selectedTeam ? (
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
                 <Hash className="w-5 h-5" />
               </div>
             ) : (
@@ -319,12 +320,12 @@ export default function MessagesView({ initialUserId }) {
             )}
             <div className="truncate">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-900 text-sm truncate">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate">
                   {selectedTeam ? selectedTeam.name : selectedUser?.name}
                 </h3>
                 {selectedUser && getRoleIcon(selectedUser.role)}
               </div>
-              <p className="text-[11px] text-slate-400 truncate">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
                 {selectedTeam
                   ? selectedTeam.description || 'Department discussion channel'
                   : `${selectedUser?.title || selectedUser?.role} • Direct Message`}
@@ -334,10 +335,10 @@ export default function MessagesView({ initialUserId }) {
         </div>
 
         {/* Message Feed */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/40">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/40 dark:bg-slate-950/40">
           {messages.length === 0 ? (
-            <div className="text-center py-20 text-slate-400 text-xs">
-              <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <div className="text-center py-20 text-slate-400 dark:text-slate-500 text-xs">
+              <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
               No messages here yet. Send a greeting to start the conversation!
             </div>
           ) : (
@@ -359,10 +360,10 @@ export default function MessagesView({ initialUserId }) {
                   />
                   <div>
                     <div className={`flex items-center gap-1.5 mb-1 ${isMe ? 'justify-end' : ''}`}>
-                      <span className="text-[11px] font-bold text-slate-800">
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
                         {isMe ? 'You' : msg.sender_name}
                       </span>
-                      <span className="text-[9px] text-slate-400">
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500">
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
@@ -370,7 +371,7 @@ export default function MessagesView({ initialUserId }) {
                       className={`p-3 rounded-2xl text-xs leading-relaxed ${
                         isMe
                           ? 'bg-indigo-600 text-white rounded-tr-xs shadow-md shadow-indigo-600/10'
-                          : 'bg-white text-slate-800 rounded-tl-xs border border-slate-200/80 shadow-2xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-xs border border-slate-200/80 dark:border-slate-700 shadow-2xs'
                       }`}
                     >
                       {msg.content}
@@ -384,7 +385,7 @@ export default function MessagesView({ initialUserId }) {
         </div>
 
         {/* Message Input Bar */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 bg-white flex items-center gap-2">
+        <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
           <input
             type="text"
             placeholder={
@@ -394,7 +395,7 @@ export default function MessagesView({ initialUserId }) {
             }
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            className="flex-1 px-4 py-2.5 rounded-2xl border border-slate-200 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-hidden"
+            className="flex-1 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-hidden"
           />
           <button
             type="submit"

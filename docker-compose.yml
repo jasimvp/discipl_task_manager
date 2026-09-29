@@ -1,0 +1,21 @@
+services:
+  discipl-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: discipl-workspace:latest
+    container_name: discipl_task_manager
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - JWT_SECRET=discipl-enterprise-secret-key-change-this-in-production
+      - DB_PATH=/app/data/taskmanager.db
+    volumes:
+      - discipl_data:/app/data
+
+volumes:
+  discipl_data:
+    driver: local

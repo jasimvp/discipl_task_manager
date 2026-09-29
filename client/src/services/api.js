@@ -215,6 +215,55 @@ export const api = {
     return res.json();
   },
 
+  async claimTask(id) {
+    const res = await fetch(`${API_BASE}/tasks/${id}/claim`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to claim task');
+    }
+    return res.json();
+  },
+
+  async releaseTaskClaim(id) {
+    const res = await fetch(`${API_BASE}/tasks/${id}/release-claim`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to release task claim');
+    }
+    return res.json();
+  },
+
+  async getCompanyInvites() {
+    const res = await fetch(`${API_BASE}/auth/company-invites`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch company invites');
+    return res.json();
+  },
+
+  async deleteCompanyInvite(id) {
+    const res = await fetch(`${API_BASE}/auth/company-invites/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete invite');
+    return res.json();
+  },
+
+  async getPendingUsers() {
+    const res = await fetch(`${API_BASE}/auth/pending-users`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch pending users');
+    return res.json();
+  },
+
   async deleteTask(id) {
     const res = await fetch(`${API_BASE}/tasks/${id}`, {
       method: 'DELETE',

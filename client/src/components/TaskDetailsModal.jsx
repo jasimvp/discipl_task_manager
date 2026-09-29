@@ -16,7 +16,12 @@ import {
   ExternalLink,
   Link2,
   Paperclip,
-  MessageSquare
+  MessageSquare,
+  Lock,
+  Unlock,
+  Play,
+  Pause,
+  Users
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -41,14 +46,15 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
   const [currentStatus, setCurrentStatus] = useState('todo');
   const [currentProgress, setCurrentProgress] = useState(0);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [claimingTask, setClaimingTask] = useState(false);
 
-  // Deliverable / Proof of Work state (Feature 2)
+  // Deliverable / Proof of Work state
   const [isEditingDeliverable, setIsEditingDeliverable] = useState(false);
   const [deliverableInputUrl, setDeliverableInputUrl] = useState('');
   const [deliverableInputNotes, setDeliverableInputNotes] = useState('');
   const [savingDeliverable, setSavingDeliverable] = useState(false);
 
-  // Task Discussion & Comments state (Feature 1)
+  // Task Discussion & Comments state
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentDeliverableUrl, setCommentDeliverableUrl] = useState('');
@@ -89,7 +95,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
     }
   }, [isOpen, taskId]);
 
-  // Real-time comment updates via Socket.IO
+  // Real-time task and comment updates via Socket.IO
   useEffect(() => {
     if (!socket || !taskId) return;
 
@@ -102,9 +108,22 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
       }
     };
 
+    const handleTaskUpdated = (updatedTask) => {
+      if (updatedTask && Number(updatedTask.id) === Number(taskId)) {
+        setTask(updatedTask);
+        setCurrentStatus(updatedTask.status);
+        setCurrentProgress(updatedTask.progress_pct || 0);
+      }
+    };
+
     socket.on('task_comment_added', handleCommentAdded);
+    socket.on('task_updated', handleTaskUpdated);
+    socket.on('task_claimed', () => fetchTaskDetails());
+
     return () => {
       socket.off('task_comment_added', handleCommentAdded);
+      socket.off('task_updated', handleTaskUpdated);
+      socket.off('task_claimed', () => fetchTaskDetails());
     };
   }, [socket, taskId]);
 
@@ -112,8 +131,49 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
 
   const isFounder = user?.role === 'founder';
   const isLead = user?.role === 'team_lead';
-  const isAssignee = task?.assigned_to === user?.id;
+  
+  // Multi-assignee checks
+  const assigneesList = task?.assignees && task.assignees.length > 0 
+    ? task.assignees 
+    : (task?.assignee_name ? [{ id: task.assigned_to, name: task.assignee_name, avatar: task.assignee_avatar, role: task.assignee_role, title: task.assignee_title }] : []);
+  
+  const isAssignee = assigneesList.some((a) => a.id === user?.id) || task?.assigned_to === user?.id;
   const canReassign = isFounder || isLead;
+
+  // Concurrency Claim Lock checks
+  const isClaimedByMe = task?.claimed_by === user?.id;
+  const isClaimedByOther = Boolean(task?.claimed_by && task.claimed_by !== user?.id && task?.status === 'in_progress');
+  const isCompleted = task?.status === 'completed';
+
+  // Handle claiming task (Starting work)
+  const handleClaimTask = async () => {
+    try {
+      setClaimingTask(true);
+      setError('');
+      await api.claimTask(taskId);
+      await fetchTaskDetails();
+      if (onTaskUpdated) onTaskUpdated();
+    } catch (err) {
+      setError(err.message || 'Failed to start task');
+    } finally {
+      setClaimingTask(false);
+    }
+  };
+
+  // Handle releasing task claim
+  const handleReleaseClaim = async () => {
+    try {
+      setClaimingTask(true);
+      setError('');
+      await api.releaseTaskClaim(taskId);
+      await fetchTaskDetails();
+      if (onTaskUpdated) onTaskUpdated();
+    } catch (err) {
+      setError(err.message || 'Failed to release claim');
+    } finally {
+      setClaimingTask(false);
+    }
+  };
 
   // Handle employee requesting rejection / reassignment
   const handleRequestRejection = async (e) => {
@@ -178,8 +238,14 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
 
   // Handle status & progress update
   const handleUpdateStatusAndProgress = async (newStatus, newProgress) => {
+    if (isClaimedByOther && !isFounder && !isLead) {
+      setError(`Cannot modify: Task is actively locked by ${task?.claimed_by_name || 'another assignee'}.`);
+      return;
+    }
+
     try {
       setUpdatingStatus(true);
+      setError('');
       await api.updateTask(taskId, {
         status: newStatus !== undefined ? newStatus : currentStatus,
         progress_pct: newProgress !== undefined ? newProgress : currentProgress,
@@ -259,96 +325,207 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
     }
   };
 
-  const isCompleted = currentStatus === 'completed';
-  const todayStr = new Date().toISOString().split('T')[0];
-  const isOverdue = task?.due_date && task.due_date < todayStr && !isCompleted;
-  const isDueToday = task?.due_date && task.due_date === todayStr && !isCompleted;
+  const isOverdue = task?.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0)) && task?.status !== 'completed';
+  const isDueToday = task?.due_date && new Date(task.due_date).toDateString() === new Date().toDateString() && task?.status !== 'completed';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-colors">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-              task?.priority === 'urgent'
-                ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                : task?.priority === 'high'
-                ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                : task?.priority === 'medium'
-                ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-            }`}>
-              {task?.priority} Priority
+        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">
+              #{task?.id || taskId}
             </span>
-            <span className="text-xs text-slate-400">Task #{task?.id}</span>
+            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+              task?.priority === 'urgent'
+                ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
+                : task?.priority === 'high'
+                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                : task?.priority === 'medium'
+                ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400'
+                : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+            }`}>
+              {task?.priority?.toUpperCase()} PRIORITY
+            </span>
+            {task?.team_name && (
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline-block">
+                • {task.team_name}
+              </span>
+            )}
           </div>
+
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content body */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        {/* Content Body */}
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-              {error}
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+              <div className="flex-1 font-medium">{error}</div>
             </div>
           )}
 
           {/* Title & Description */}
           <div>
-            <h2 className="text-xl font-bold text-slate-900 leading-snug">{task?.title}</h2>
-            <p className="text-slate-600 text-sm mt-2 whitespace-pre-line bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-snug">
+              {task?.title}
+            </h2>
+            <p className="text-slate-600 dark:text-slate-300 text-xs mt-2 whitespace-pre-line bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
               {task?.description || 'No detailed description provided.'}
             </p>
           </div>
 
-          {/* REASSIGNMENT / REJECTION REQUEST BANNER (Crucial User Requirement) */}
+          {/* CONCURRENCY CLAIM WORK LOCK BANNER */}
+          {isCompleted ? (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                    Deliverable Completed
+                  </h4>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Completed and synced across all assignees!
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                100% DONE
+              </span>
+            </div>
+          ) : isClaimedByOther ? (
+            <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-2 animate-in fade-in duration-200">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                      Deliverable In Progress by {task.claimed_by_name || 'Teammate'}
+                    </h4>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                      Active Lock
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                    ഓവർലാപ്പ് ഒഴിവാക്കാനായി ഈ ടാസ്ക് നിലവിൽ <strong>{task.claimed_by_name}</strong> വർക്ക് ചെയ്യുകയാണ്. {task.claimed_by_name} ഇത് കംപ്ലീറ്റ് ചെയ്യുമ്പോൾ നിങ്ങളുടെ ഡാഷ്‌ബോർഡിലും ഓട്ടോമാറ്റിക് ആയി കംപ്ലീറ്റ് ആയി സിങ്ക് ആകുന്നതാണ്.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : isClaimedByMe ? (
+            <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Play className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider">
+                    You are Actively Working on this Deliverable
+                  </h4>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Locked to prevent duplicate work. Teammates can see you are active.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleReleaseClaim}
+                  disabled={claimingTask}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <Pause className="w-3.5 h-3.5 inline mr-1" />
+                  Pause / Release
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateStatusAndProgress('completed', 100)}
+                  disabled={updatingStatus}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5 inline mr-1" />
+                  Complete Task
+                </button>
+              </div>
+            </div>
+          ) : task?.status === 'todo' && isAssignee ? (
+            <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Play className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                    Ready to Start Working?
+                  </h4>
+                  <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                    Clicking "Start Task" locks the task so other assignees know work is underway.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClaimTask}
+                disabled={claimingTask}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>{claimingTask ? 'Locking Task...' : 'Start Working (Claim Task)'}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {/* REASSIGNMENT REQUEST BANNER */}
           {task?.rejection_status === 'requested' && (
-            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 space-y-3 animate-in fade-in duration-300">
+            <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-3 animate-in fade-in duration-300">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <ShieldAlert className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                      Reassignment Requested by Employee
+                    <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                      Reassignment Requested by Assignee
                     </h4>
-                    <span className="text-[10px] text-amber-700">
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400">
                       {task.rejected_at ? new Date(task.rejected_at).toLocaleString() : 'Recent'}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-900 font-medium mt-1">
+                  <p className="text-xs text-amber-900 dark:text-amber-300 font-medium mt-1">
                     Employee Reason:
                   </p>
-                  <blockquote className="text-xs text-amber-800 bg-white/80 p-2.5 rounded-xl border border-amber-200 mt-1 italic">
+                  <blockquote className="text-xs text-amber-800 dark:text-amber-200 bg-white/80 dark:bg-slate-800/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 mt-1 italic">
                     "{task.rejection_reason}"
                   </blockquote>
                 </div>
               </div>
 
-              {/* Founder / Team Lead action controls */}
               {canReassign && (
-                <div className="pt-2 border-t border-amber-200/80 flex items-center justify-end gap-2">
+                <div className="pt-2 border-t border-amber-200/80 dark:border-amber-800 flex items-center justify-end gap-2">
                   <button
                     onClick={handleDismissRejection}
                     disabled={submittingReassign}
-                    className="px-3 py-1.5 rounded-xl border border-amber-300 bg-white hover:bg-amber-100/50 text-amber-800 text-xs font-semibold transition-colors"
+                    className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-200 text-xs font-semibold"
                   >
                     Decline Request
                   </button>
                   <button
                     onClick={() => setShowReassignForm(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shadow-xs"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
-                    Accept & Reassign Task
+                    Accept & Reassign
                   </button>
                 </div>
               )}
@@ -357,53 +534,40 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
 
           {/* Form to reassign (Founder & Lead) */}
           {showReassignForm && canReassign && (
-            <form onSubmit={handleReassign} className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-200 space-y-3">
+            <form onSubmit={handleReassign} className="bg-indigo-50/70 dark:bg-slate-800 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
                   <UserPlus className="w-4 h-4 text-indigo-600" />
                   Select New Employee to Reassign Task
                 </h4>
                 <button
                   type="button"
                   onClick={() => setShowReassignForm(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800"
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
                 >
                   Cancel
                 </button>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Assign To Employee:
                 </label>
                 <select
                   value={newAssigneeId}
                   onChange={(e) => setNewAssigneeId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-medium focus:border-indigo-500"
                 >
                   <option value="">Select Employee...</option>
                   {availableUsers
-                    .filter((u) => u.id !== task?.assigned_to)
+                    .filter((u) => !assigneesList.some((a) => a.id === u.id))
                     .map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} ({u.title || u.role}) - {u.active_tasks_count || 0} active tasks
                       </option>
                     ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Reassignment Note / Instructions (Optional):
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Handing off from Ananya for backend tuning..."
-                  value={reassignNote}
-                  onChange={(e) => setReassignNote(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:border-indigo-500"
-                />
               </div>
 
               <div className="flex justify-end gap-2 pt-1">
@@ -418,32 +582,29 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </form>
           )}
 
-          {/* Form for Employee to request reassignment (Wrongly assigned task) */}
+          {/* Form for Employee to request reassignment */}
           {showRejectForm && isAssignee && (
-            <form onSubmit={handleRequestRejection} className="bg-amber-50 p-4 rounded-2xl border border-amber-200 space-y-3">
+            <form onSubmit={handleRequestRejection} className="bg-amber-50 dark:bg-amber-950/40 p-4 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
                   Request Task Reassignment
                 </h4>
                 <button
                   type="button"
                   onClick={() => setShowRejectForm(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800"
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
                 >
                   Cancel
                 </button>
               </div>
-              <p className="text-xs text-amber-800">
-                Explain why this task was wrongly assigned (e.g. wrong domain, lack of access, or schedule conflict) so your team lead or founder can reassign it.
-              </p>
               <textarea
                 rows={3}
                 required
                 placeholder="State why this task should be assigned to another teammate..."
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-xs focus:border-amber-500 outline-hidden resize-none"
+                className="w-full px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-amber-500 outline-hidden resize-none"
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -457,60 +618,66 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </form>
           )}
 
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100 text-xs">
+          {/* Metadata Grid (Assignees, Creator, Due Date) */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-3">
             <div>
-              <span className="text-slate-400 block text-[11px] mb-1">Assigned To</span>
-              <div className="flex items-center gap-2">
-                <UserAvatar
-                  name={task?.assignee_name}
-                  avatar={task?.assignee_avatar}
-                  role={task?.assignee_role}
-                  size="xs"
-                />
-                <div>
-                  <span className="font-bold text-slate-800">{task?.assignee_name || 'Unassigned'}</span>
-                  <span className="text-[10px] text-slate-500 block">{task?.assignee_title}</span>
-                </div>
+              <span className="text-slate-400 dark:text-slate-500 block text-[11px] mb-1.5 font-semibold uppercase tracking-wider">
+                Assigned Team Members ({assigneesList.length})
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {assigneesList.map((a) => {
+                  const isWorker = task?.claimed_by === a.id;
+                  return (
+                    <div
+                      key={a.id}
+                      className={`flex items-center gap-2 p-2 rounded-xl border ${
+                        isWorker 
+                          ? 'border-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50' 
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
+                      }`}
+                    >
+                      <UserAvatar name={a.name} avatar={a.avatar} role={a.role} size="xs" />
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-slate-900 dark:text-white">{a.name}</span>
+                          {isWorker && (
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
+                              Active Worker
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                          {a.title || a.role}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div>
-              <span className="text-slate-400 block text-[11px] mb-1">Assigned By</span>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-800">{task?.creator_name}</span>
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+              <div>
+                <span className="text-slate-400 dark:text-slate-500 block text-[11px] mb-1">Assigned By</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{task?.creator_name}</span>
               </div>
-            </div>
 
-            <div>
-              <span className="text-slate-400 block text-[11px] mb-1">Due Date</span>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 font-medium text-slate-700">
+              <div>
+                <span className="text-slate-400 dark:text-slate-500 block text-[11px] mb-1">Due Date</span>
+                <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
                   <span>{task?.due_date || 'No deadline'}</span>
                 </div>
-                {isOverdue && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full w-fit animate-pulse">
-                    <AlertTriangle className="w-3 h-3 text-rose-600" />
-                    Overdue
-                  </span>
-                )}
-                {isDueToday && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full w-fit">
-                    <Clock className="w-3 h-3 text-amber-600" />
-                    Due Today
-                  </span>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Deliverable / Proof of Work (Feature 2) */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          {/* Deliverable / Proof of Work */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Link2 className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
                   Deliverable / Proof of Work
                 </span>
               </div>
@@ -518,7 +685,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 <button
                   type="button"
                   onClick={() => setIsEditingDeliverable(!isEditingDeliverable)}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                 >
                   {isEditingDeliverable ? 'Cancel' : 'Edit Link'}
                 </button>
@@ -526,19 +693,19 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </div>
 
             {task?.deliverable_url && !isEditingDeliverable ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/50 dark:bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
                 <div className="min-w-0 flex-1">
                   <a
                     href={task.deliverable_url.startsWith('http') ? task.deliverable_url : `https://${task.deliverable_url}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-bold text-indigo-700 hover:underline text-xs flex items-center gap-1.5 truncate"
+                    className="font-bold text-indigo-700 dark:text-indigo-300 hover:underline text-xs flex items-center gap-1.5 truncate"
                   >
                     <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{task.deliverable_url}</span>
                   </a>
                   {task.deliverable_notes && (
-                    <p className="text-[11px] text-slate-600 mt-1">{task.deliverable_notes}</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">{task.deliverable_notes}</p>
                   )}
                 </div>
                 <a
@@ -552,53 +719,41 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 </a>
               </div>
             ) : !task?.deliverable_url && !isEditingDeliverable ? (
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <Link2 className="w-4 h-4 text-slate-400" />
                   <span>No deliverable / proof link attached yet.</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsEditingDeliverable(true)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-colors"
+                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-900 transition-colors"
                 >
                   + Attach Link (PR / Figma / Doc)
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSaveDeliverable} className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800">
-                    {task?.deliverable_url ? 'Update Deliverable Link' : 'Attach Deliverable Link'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingDeliverable(false)}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <form onSubmit={handleSaveDeliverable} className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                 <input
                   type="url"
                   required
                   placeholder="https://github.com/... or Figma or Google Doc link"
                   value={deliverableInputUrl}
                   onChange={(e) => setDeliverableInputUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:border-indigo-500 outline-hidden"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
                 />
                 <input
                   type="text"
-                  placeholder="Optional notes or instructions (e.g. PR merged, Figma frame 3)..."
+                  placeholder="Optional notes or instructions..."
                   value={deliverableInputNotes}
                   onChange={(e) => setDeliverableInputNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:border-indigo-500 outline-hidden"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
                 />
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => setIsEditingDeliverable(false)}
-                    className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800"
+                    className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
                   >
                     Cancel
                   </button>
@@ -615,19 +770,19 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
           </div>
 
           {/* Status & Progress Management */}
-          <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4">
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
                 Status & Progress Tracking
               </span>
               <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                 currentStatus === 'completed'
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
                   : currentStatus === 'in_progress'
-                  ? 'bg-blue-100 text-blue-700'
+                  ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'
                   : currentStatus === 'review'
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-slate-100 text-slate-700'
+                  ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
               }`}>
                 {currentStatus.replace('_', ' ').toUpperCase()}
               </span>
@@ -636,32 +791,36 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             {/* Status Selector */}
             <div className="grid grid-cols-4 gap-2">
               {[
-                { key: 'todo', label: 'To Do', color: 'slate' },
-                { key: 'in_progress', label: 'In Progress', color: 'blue' },
-                { key: 'review', label: 'Under Review', color: 'purple' },
-                { key: 'completed', label: 'Completed', color: 'emerald' },
-              ].map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => handleUpdateStatusAndProgress(s.key, s.key === 'completed' ? 100 : currentProgress)}
-                  className={`py-2 px-1 text-center text-xs rounded-xl font-semibold border transition-all ${
-                    currentStatus === s.key
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200'
-                      : 'border-slate-200 hover:bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+                { key: 'todo', label: 'To Do' },
+                { key: 'in_progress', label: 'In Progress' },
+                { key: 'review', label: 'Under Review' },
+                { key: 'completed', label: 'Completed' },
+              ].map((s) => {
+                const disabled = isClaimedByOther && !isFounder && !isLead;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => handleUpdateStatusAndProgress(s.key, s.key === 'completed' ? 100 : currentProgress)}
+                    className={`py-2 px-1 text-center text-xs rounded-xl font-semibold border transition-all ${
+                      currentStatus === s.key
+                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-200 dark:ring-indigo-900'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Progress Slider */}
             <div>
               <div className="flex items-center justify-between text-xs mb-1.5">
-                <span className="font-semibold text-slate-700">Completion: {currentProgress}%</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Completion: {currentProgress}%</span>
                 <span className="text-slate-400">
-                  {currentProgress === 100 ? '🎉 All tasks done' : `${100 - currentProgress}% remaining`}
+                  {currentProgress === 100 ? '🎉 Deliverable complete' : `${100 - currentProgress}% remaining`}
                 </span>
               </div>
               <input
@@ -669,45 +828,40 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 min="0"
                 max="100"
                 step="5"
+                disabled={isClaimedByOther && !isFounder && !isLead}
                 value={currentProgress}
                 onChange={(e) => setCurrentProgress(Number(e.target.value))}
                 onMouseUp={() => handleUpdateStatusAndProgress(currentStatus, currentProgress)}
                 onTouchEnd={() => handleUpdateStatusAndProgress(currentStatus, currentProgress)}
-                className="w-full accent-indigo-600 cursor-pointer"
+                className="w-full accent-indigo-600 cursor-pointer disabled:opacity-50"
               />
             </div>
           </div>
 
-          {/* Task Discussion & Comments Feed (Feature 1) */}
-          <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+          {/* Discussion & Updates Feed */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
                   Discussion & Updates ({comments.length})
                 </span>
               </div>
             </div>
 
-            {/* Comments List */}
             <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
               {comments.length === 0 ? (
-                <div className="text-center py-5 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  No comments yet. Start the conversation or post progress updates below.
+                <div className="text-center py-5 text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                  No comments yet. Start the conversation below.
                 </div>
               ) : (
                 comments.map((c) => (
-                  <div key={c.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
+                  <div key={c.id} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <UserAvatar
-                          name={c.user_name}
-                          avatar={c.user_avatar}
-                          role={c.user_role}
-                          size="xs"
-                        />
-                        <span className="font-bold text-slate-800 text-xs">{c.user_name}</span>
-                        <span className="text-[10px] text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200 font-medium">
+                        <UserAvatar name={c.user_name} avatar={c.user_avatar} role={c.user_role} size="xs" />
+                        <span className="font-bold text-slate-800 dark:text-white text-xs">{c.user_name}</span>
+                        <span className="text-[10px] text-slate-500 bg-white dark:bg-slate-800 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700 font-medium">
                           {c.user_role === 'founder' ? '👑 Founder' : c.user_role === 'team_lead' ? '🛡️ Lead' : '💼 Employee'}
                         </span>
                       </div>
@@ -715,18 +869,18 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                         {new Date(c.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700 pl-7 whitespace-pre-wrap">{c.content}</p>
+                    <p className="text-xs text-slate-700 dark:text-slate-300 pl-7 whitespace-pre-wrap">{c.content}</p>
                     {c.deliverable_url && (
                       <div className="pl-7 pt-1">
                         <a
                           href={c.deliverable_url.startsWith('http') ? c.deliverable_url : `https://${c.deliverable_url}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-400 hover:underline bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 px-2.5 py-1 rounded-lg"
                         >
                           <Link2 className="w-3 h-3 text-indigo-600" />
                           <span className="truncate max-w-xs">{c.deliverable_url}</span>
-                          <ExternalLink className="w-2.5 h-2.5 text-indigo-500" />
+                          <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       </div>
                     )}
@@ -736,23 +890,17 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </div>
 
             {/* Post Comment Box */}
-            <form onSubmit={handlePostComment} className="pt-2 border-t border-slate-100 space-y-2">
+            <form onSubmit={handlePostComment} className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
               <div className="flex items-start gap-2">
-                <UserAvatar
-                  name={user?.name}
-                  avatar={user?.avatar}
-                  role={user?.role}
-                  size="xs"
-                  className="mt-1"
-                />
+                <UserAvatar name={user?.name} avatar={user?.avatar} role={user?.role} size="xs" className="mt-1" />
                 <div className="flex-1 space-y-2">
                   <textarea
                     rows={2}
                     required
-                    placeholder="Write a message, update, or question on this deliverable..."
+                    placeholder="Write a message, deliverable link, or question..."
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs focus:bg-white focus:border-indigo-500 outline-hidden resize-none"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white text-xs outline-hidden resize-none"
                   />
 
                   {showAttachDeliverableInComment && (
@@ -760,10 +908,10 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                       <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <input
                         type="url"
-                        placeholder="Paste deliverable URL (PR, Figma, Doc, Live Link)..."
+                        placeholder="Paste deliverable link (GitHub PR, Figma, etc)..."
                         value={commentDeliverableUrl}
                         onChange={(e) => setCommentDeliverableUrl(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white outline-hidden focus:border-indigo-500"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs outline-hidden"
                       />
                     </div>
                   )}
@@ -772,8 +920,8 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                     <button
                       type="button"
                       onClick={() => setShowAttachDeliverableInComment(!showAttachDeliverableInComment)}
-                      className={`text-[11px] font-semibold flex items-center gap-1 transition-colors ${
-                        showAttachDeliverableInComment ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'
+                      className={`text-[11px] font-semibold flex items-center gap-1 ${
+                        showAttachDeliverableInComment ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
                       }`}
                     >
                       <Paperclip className="w-3.5 h-3.5" />
@@ -783,7 +931,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                     <button
                       type="submit"
                       disabled={submittingComment || !commentText.trim()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs"
                     >
                       <Send className="w-3 h-3" />
                       <span>{submittingComment ? 'Sending...' : 'Send'}</span>
@@ -794,37 +942,15 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </form>
           </div>
 
-          {/* Activity Log */}
-          {task?.activities && task.activities.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Activity History
-              </h4>
-              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                {task.activities.map((act) => (
-                  <div key={act.id} className="text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-slate-800">{act.details}</p>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(act.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
         </div>
 
         {/* Footer Actions */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50/60 shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50/60 dark:bg-slate-800/40 shrink-0">
           <div>
             {canReassign && (
               <button
                 onClick={handleDeleteTask}
-                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-xs flex items-center gap-1 font-semibold"
+                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors text-xs flex items-center gap-1 font-semibold"
                 title="Delete Task"
               >
                 <Trash2 className="w-4 h-4" />
@@ -834,26 +960,24 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* If task is assigned to current employee and not already requested */}
             {isAssignee && task?.rejection_status !== 'requested' && !showRejectForm && (
               <button
                 type="button"
                 onClick={() => setShowRejectForm(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 text-xs font-semibold transition-colors"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                 Wrong Task? Request Reassignment
               </button>
             )}
 
-            {/* Founder / Lead can also reassign directly at any time */}
             {canReassign && !showReassignForm && task?.rejection_status !== 'requested' && (
               <button
                 type="button"
                 onClick={() => setShowReassignForm(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors"
               >
-                <UserPlus className="w-3.5 h-3.5 text-slate-600" />
+                <UserPlus className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
                 Reassign Task
               </button>
             )}
@@ -861,7 +985,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-semibold transition-colors"
             >
               Done
             </button>

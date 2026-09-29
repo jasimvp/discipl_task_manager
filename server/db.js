@@ -103,6 +103,28 @@ function initDb() {
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS task_assignees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role_tag TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(task_id, user_id),
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS company_invites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      role TEXT NOT NULL DEFAULT 'employee',
+      department TEXT,
+      title TEXT,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
   `);
 
   // Safe migrations for existing database
@@ -113,7 +135,17 @@ function initDb() {
     db.exec('ALTER TABLE tasks ADD COLUMN deliverable_notes TEXT');
   } catch (e) {}
   try {
-    db.exec("UPDATE users SET status = 'approved' WHERE status = 'pending'");
+    db.exec('ALTER TABLE tasks ADD COLUMN claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN claimed_at DATETIME');
+  } catch (e) {}
+  try {
+    // Backfill task_assignees from existing tasks.assigned_to
+    db.exec(`
+      INSERT OR IGNORE INTO task_assignees (task_id, user_id)
+      SELECT id, assigned_to FROM tasks WHERE assigned_to IS NOT NULL
+    `);
   } catch (e) {}
 
   // Seed default Discipl company teams if empty (no users seeded - fully dynamic!)

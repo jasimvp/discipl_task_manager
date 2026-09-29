@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import AuthView from './components/AuthView';
+import PendingWorkspaceView from './components/PendingWorkspaceView';
 import Navbar from './components/Navbar';
 import DashboardView from './components/DashboardView';
 import TaskBoardView from './components/TaskBoardView';
@@ -51,13 +53,18 @@ function MainApp() {
     return <AuthView />;
   }
 
+  // If logged in but pending founder email linking
+  if (user.status === 'pending_approval' || user.status === 'pending') {
+    return <PendingWorkspaceView user={user} />;
+  }
+
   const handleOpenChatWithUser = (userId) => {
     setChatDirectUserId(userId);
     setActiveTab('messages');
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100 font-sans transition-colors duration-150">
       
       {/* Navigation Header */}
       <Navbar
@@ -104,12 +111,12 @@ function MainApp() {
         )}
       </main>
 
-      {/* Create Task Modal */}
+      {/* Create Task Modal (Multi-assignee enabled) */}
       <TaskModal
         isOpen={isCreateTaskOpen}
         onClose={() => setIsCreateTaskOpen(false)}
         onTaskCreated={() => {
-          // Socket event will also trigger update across all open tabs
+          // Socket event will trigger update
         }}
       />
 
@@ -122,7 +129,7 @@ function MainApp() {
         }}
       />
 
-      {/* Task Details & Reassignment Modal */}
+      {/* Task Details & Reassignment Modal (Concurrency locking enabled) */}
       <TaskDetailsModal
         taskId={selectedTaskId}
         isOpen={!!selectedTaskId}
@@ -148,8 +155,10 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { 
   LayoutDashboard, 
   CheckSquare, 
@@ -16,7 +17,9 @@ import {
   Menu,
   X,
   Search,
-  UserPlus
+  UserPlus,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { api } from '../services/api';
 import DisciplLogo from './DisciplLogo';
@@ -24,6 +27,7 @@ import UserAvatar from './UserAvatar';
 
 export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, onOpenAddEmployee }) {
   const { user, logout, socket } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -85,30 +89,30 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
   const getRoleBadge = (role) => {
     switch (role) {
       case 'founder':
-        return <span className="bg-purple-100 text-purple-700 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-purple-200 flex items-center gap-1">👑 Founder</span>;
+        return <span className="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-purple-200 dark:border-purple-800 flex items-center gap-1">👑 Founder</span>;
       case 'team_lead':
-        return <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-blue-200 flex items-center gap-1">🛡️ Team Lead</span>;
+        return <span className="bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-blue-200 dark:border-blue-800 flex items-center gap-1">🛡️ Team Lead</span>;
       case 'employee':
-        return <span className="bg-emerald-100 text-emerald-700 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-emerald-200 flex items-center gap-1">💼 Employee</span>;
+        return <span className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">💼 Employee</span>;
       default:
         return null;
     }
   };
 
   return (
-    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 shadow-xs">
+    <header className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 sticky top-0 z-40 shadow-xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
-          {/* Discipl Brand with 'D' Logo - Clean without 'Enterprise' tag */}
+          {/* Discipl Brand with 'D' Logo */}
           <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setActiveTab('dashboard')}>
             <DisciplLogo className="w-10 h-10" size={26} />
             <div>
-              <span className="font-extrabold text-2xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+              <span className="font-extrabold text-2xl text-slate-900 dark:text-white tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                 Discipl
               </span>
-              <p className="text-[10px] font-medium text-slate-400 hidden sm:block tracking-wide">
-                {isFounder ? 'Executive Command' : isLead ? 'Team Operations' : 'Personal Workspace'}
+              <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 hidden sm:block tracking-wide">
+                {isFounder ? 'Executive Workspace' : isLead ? 'Team Operations' : 'Personal Workspace'}
               </p>
             </div>
           </div>
@@ -120,8 +124,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               onClick={() => setActiveTab('dashboard')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'dashboard'
-                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/60 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-800 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <LayoutDashboard className="w-4 h-4" />
@@ -133,8 +137,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               onClick={() => setActiveTab('tasks')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'tasks'
-                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/60 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-800 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <CheckSquare className="w-4 h-4" />
@@ -147,8 +151,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                 onClick={() => setActiveTab('reassignments')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all relative ${
                   activeTab === 'reassignments'
-                    ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <AlertCircle className={`w-4 h-4 ${reassignmentCount > 0 ? 'text-amber-600 animate-pulse' : ''}`} />
@@ -166,8 +170,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               onClick={() => setActiveTab('messages')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'messages'
-                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/60 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-800 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
@@ -179,8 +183,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               onClick={() => setActiveTab('team')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'team'
-                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/60 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-800 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Users className="w-4 h-4" />
@@ -189,7 +193,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
           </nav>
 
           {/* User Controls & Profile */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
             
             {/* Quick Universal Search (Command Palette) */}
             {onOpenCommandPalette && (
@@ -197,19 +201,19 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                 <button
                   type="button"
                   onClick={onOpenCommandPalette}
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs transition-all shadow-2xs group"
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white text-xs transition-all shadow-2xs group"
                   title="Search deliverables, teammates... (Ctrl + K)"
                 >
-                  <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                  <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
                   <span className="text-[11px] font-medium">Search...</span>
-                  <kbd className="px-1.5 py-0.2 bg-white text-[10px] font-bold text-slate-400 border border-slate-200 rounded group-hover:border-slate-300">
+                  <kbd className="px-1.5 py-0.2 bg-white dark:bg-slate-900 text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-slate-700 rounded group-hover:border-slate-300">
                     ⌘K
                   </kbd>
                 </button>
                 <button
                   type="button"
                   onClick={onOpenCommandPalette}
-                  className="sm:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                  className="sm:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   title="Quick Search"
                 >
                   <Search className="w-5 h-5" />
@@ -226,9 +230,23 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                 title="Add Employee / Teammate by Email"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>Add Teammate</span>
+                <span>Link Teammate</span>
               </button>
             )}
+
+            {/* DARK MODE TOGGLE BUTTON */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDark ? (
+                <Sun className="w-5 h-5 text-amber-400 animate-in spin-in-180 duration-200" />
+              ) : (
+                <Moon className="w-5 h-5 text-indigo-600 animate-in spin-in-180 duration-200" />
+              )}
+            </button>
 
             {/* Notification Bell */}
             <div className="relative">
@@ -237,51 +255,51 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                   setShowNotifications(!showNotifications);
                   if (!showNotifications && unreadCount > 0) handleMarkRead();
                 }}
-                className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 relative transition-colors"
+                className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 relative transition-colors"
                 title="Notifications"
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-ping" />
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-900 animate-ping" />
                 )}
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white" />
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
                 )}
               </button>
 
               {/* Notification Dropdown */}
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95">
-                  <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                    <span className="font-bold text-slate-900 text-xs">Notifications</span>
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-3 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <span className="font-bold text-slate-900 dark:text-white text-xs">Notifications</span>
                     <button
                       onClick={handleMarkRead}
-                      className="text-xs text-indigo-600 hover:underline font-semibold"
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
                     >
                       Mark all read
                     </button>
                   </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                     {notifications.length === 0 ? (
                       <div className="px-4 py-8 text-center text-xs text-slate-400">
                         No notifications yet
                       </div>
                     ) : (
                       notifications.map((n) => (
-                        <div key={n.id} className={`p-3 text-xs hover:bg-slate-50 transition-colors ${!n.is_read ? 'bg-indigo-50/40' : ''}`}>
+                        <div key={n.id} className={`p-3 text-xs hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors ${!n.is_read ? 'bg-indigo-50/40 dark:bg-indigo-950/30' : ''}`}>
                           <div className="flex items-start gap-2">
                             {n.type === 'access_request' ? (
-                              <KeyRound className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
+                              <KeyRound className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
                             ) : n.type === 'task_rejected' ? (
-                              <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                             ) : n.type === 'task_completed' ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
                             ) : (
-                              <Bell className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                              <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
                             )}
                             <div className="flex-1">
-                              <p className="font-semibold text-slate-800">{n.title}</p>
-                              <p className="text-slate-600 mt-0.5">{n.message}</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200">{n.title}</p>
+                              <p className="text-slate-600 dark:text-slate-400 mt-0.5">{n.message}</p>
                               <span className="text-[10px] text-slate-400 mt-1 block">
                                 {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
@@ -299,7 +317,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-all text-left bg-white shadow-2xs"
+                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left bg-white dark:bg-slate-800 shadow-2xs"
               >
                 <UserAvatar
                   name={user?.name}
@@ -309,7 +327,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                 />
                 <div className="hidden sm:block">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-800 truncate max-w-[120px]">{user?.name}</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[120px]">{user?.name}</span>
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                   <div>{getRoleBadge(user?.role)}</div>
@@ -318,13 +336,25 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
 
               {/* User Dropdown */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2.5 z-50 animate-in fade-in zoom-in-95">
-                  <div className="px-3 py-2 border-b border-slate-100 mb-2">
-                    <p className="text-xs font-bold text-slate-900">{user?.name}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2.5 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">{user?.name}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{user?.department || 'General'}</p>
                     <div className="mt-2">{getRoleBadge(user?.role)}</div>
                   </div>
+
+                  {/* Dark Mode toggle inside user menu */}
+                  <button
+                    onClick={toggleTheme}
+                    className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors mb-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+                      <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">{isDark ? 'ON' : 'OFF'}</span>
+                  </button>
 
                   {/* Sign Out Button */}
                   <button
@@ -332,10 +362,10 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                       setShowUserMenu(false);
                       logout();
                     }}
-                    className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
-                    Sign Out (ലോഗൗട്ട്)
+                    <span>Sign Out (ലോഗൗട്ട്)</span>
                   </button>
                 </div>
               )}
@@ -344,7 +374,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
             {/* Mobile Hamburger Menu Toggle Button */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="md:hidden p-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 rounded-xl text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               aria-label="Toggle navigation menu"
             >
               {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -357,8 +387,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
 
       {/* MOBILE SLIDE-DOWN DRAWER MENU */}
       {showMobileMenu && (
-        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-5 space-y-2 animate-in slide-in-from-top-3 duration-200 shadow-xl">
-          <div className="p-3 bg-slate-50 rounded-2xl mb-3 flex items-center justify-between">
+        <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pt-2 pb-5 space-y-2 animate-in slide-in-from-top-3 duration-200 shadow-xl">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <UserAvatar
                 name={user?.name}
@@ -367,31 +397,38 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
                 size="md"
               />
               <div>
-                <p className="text-xs font-bold text-slate-900">{user?.name}</p>
-                <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{user?.email}</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-white">{user?.name}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[180px]">{user?.email}</p>
                 <div className="mt-1">{getRoleBadge(user?.role)}</div>
               </div>
             </div>
+            {/* Mobile Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200"
+            >
+              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            </button>
           </div>
 
           <div className="space-y-1">
             <button
               onClick={() => { setActiveTab('dashboard'); setShowMobileMenu(false); }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                activeTab === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <LayoutDashboard className="w-4 h-4 text-indigo-600" />
+              <LayoutDashboard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>{isEmployee ? 'My Workspace' : isLead ? 'Team Dashboard' : 'Executive Dashboard'}</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('tasks'); setShowMobileMenu(false); }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'tasks' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                activeTab === 'tasks' ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <CheckSquare className="w-4 h-4 text-indigo-600" />
+              <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>{isEmployee ? 'My Tasks & Deliverables' : 'Tasks Board'}</span>
             </button>
 
@@ -399,11 +436,11 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               <button
                 onClick={() => { setActiveTab('reassignments'); setShowMobileMenu(false); }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'reassignments' ? 'bg-amber-50 text-amber-800' : 'text-slate-700 hover:bg-slate-50'
+                  activeTab === 'reassignments' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   <span>Reassignment Requests</span>
                 </div>
                 {reassignmentCount > 0 && (
@@ -417,138 +454,49 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
             <button
               onClick={() => { setActiveTab('messages'); setShowMobileMenu(false); }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'messages' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                activeTab === 'messages' ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <MessageSquare className="w-4 h-4 text-indigo-600" />
+              <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Communication Hub</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('team'); setShowMobileMenu(false); }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'team' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                activeTab === 'team' ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <Users className="w-4 h-4 text-indigo-600" />
+              <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>{isLead ? 'My Team' : 'Team Directory'}</span>
             </button>
 
             {isFounder && onOpenAddEmployee && (
               <button
                 onClick={() => { onOpenAddEmployee(); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-purple-50 text-purple-800 hover:bg-purple-100"
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 hover:bg-purple-100"
               >
-                <UserPlus className="w-4 h-4 text-purple-600" />
-                <span>+ Add Teammate (Employee / Lead)</span>
+                <UserPlus className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span>+ Link Teammate by Email</span>
               </button>
             )}
           </div>
 
-          <div className="pt-3 border-t border-slate-100">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
             <button
               onClick={() => {
                 setShowMobileMenu(false);
                 logout();
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
             >
               <LogOut className="w-4 h-4" />
-              Sign Out (ലോഗൗട്ട്)
+              <span>Sign Out (ലോഗൗട്ട്)</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Clean, Native Mobile App Feel) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 py-1.5 px-2 flex justify-around items-center shadow-2xl">
-        {/* Tab 1: Dashboard / Workspace */}
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-            activeTab === 'dashboard' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
-          }`}
-        >
-          <LayoutDashboard className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-none">
-            {isEmployee ? 'Workspace' : 'Dashboard'}
-          </span>
-        </button>
-
-        {/* Tab 2: Tasks */}
-        <button
-          onClick={() => setActiveTab('tasks')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-            activeTab === 'tasks' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
-          }`}
-        >
-          <CheckSquare className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-none">
-            {isEmployee ? 'My Tasks' : 'Tasks'}
-          </span>
-        </button>
-
-        {/* Tab 3: Reassignments (for Founder/Lead) OR Team (for Employee) */}
-        {(isFounder || isLead) ? (
-          <button
-            onClick={() => setActiveTab('reassignments')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative ${
-              activeTab === 'reassignments' ? 'text-amber-600 font-bold scale-105' : 'text-slate-500'
-            }`}
-          >
-            <AlertCircle className="w-5 h-5" />
-            {reassignmentCount > 0 && (
-              <span className="absolute top-0 right-1 w-2 h-2 bg-amber-500 rounded-full" />
-            )}
-            <span className="text-[10px] mt-0.5 leading-none">Reassign</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => setActiveTab('team')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-              activeTab === 'team' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5 leading-none">Team</span>
-          </button>
-        )}
-
-        {/* Tab 4: Messages */}
-        <button
-          onClick={() => setActiveTab('messages')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-            activeTab === 'messages' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
-          }`}
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-none">Messages</span>
-        </button>
-
-        {/* Tab 5: Team (for Founder/Lead) */}
-        {(isFounder || isLead) && (
-          <button
-            onClick={() => setActiveTab('team')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-              activeTab === 'team' ? 'text-indigo-600 font-bold scale-105' : 'text-slate-500'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5 leading-none">Team</span>
-          </button>
-        )}
-
-        {/* Menu */}
-        <button
-          onClick={() => setShowMobileMenu(!showMobileMenu)}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
-            showMobileMenu ? 'text-indigo-600 font-bold' : 'text-slate-500'
-          }`}
-        >
-          <Menu className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-none">Menu</span>
-        </button>
-      </nav>
     </header>
   );
 }

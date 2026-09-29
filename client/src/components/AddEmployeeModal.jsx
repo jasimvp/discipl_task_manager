@@ -1,55 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import {
   X,
   UserPlus,
   Mail,
   User,
-  Lock,
   Building,
   Briefcase,
   Check,
-  Copy,
   Sparkles,
   AlertCircle,
   CheckCircle2,
-  Crown
+  Crown,
+  Clock,
+  Trash2,
+  RefreshCw,
+  Send
 } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
-  const [name, setName] = useState('');
+  const [activeTab, setActiveTab] = useState('invite'); // 'invite' | 'pending' | 'preapproved'
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('Welcome@2026');
   const [role, setRole] = useState('employee');
   const [department, setDepartment] = useState('Engineering & Tech');
   const [title, setTitle] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [createdEmployee, setCreatedEmployee] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Pending users and preapproved invites
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [preapprovedInvites, setPreapprovedInvites] = useState([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+
+  const loadData = async () => {
+    try {
+      setLoadingLists(true);
+      const [pending, invites] = await Promise.all([
+        api.getPendingUsers().catch(() => []),
+        api.getCompanyInvites().catch(() => [])
+      ]);
+      setPendingUsers(pending || []);
+      setPreapprovedInvites(invites || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingLists(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setEmail('');
+      setRole('employee');
+      setDepartment('Engineering & Tech');
+      setTitle('');
+      setError('');
+      setSuccessMessage('');
+      loadData();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleGeneratePassword = () => {
-    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let pass = 'Dis@';
-    for (let i = 0; i < 6; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setPassword(pass);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password) {
-      setError('Please fill in all required fields.');
+    if (!email.trim()) {
+      setError('Please provide the employee work email.');
       return;
     }
 
     try {
       setLoading(true);
       setError('');
+      setSuccessMessage('');
       const defaultTitle = role === 'founder' 
         ? 'Co-Founder' 
         : role === 'team_lead' 
@@ -57,324 +83,330 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
         : 'Software Engineer';
 
       const res = await api.addEmployee({
-        name: name.trim(),
         email: email.trim().toLowerCase(),
-        password,
         role,
         department,
         title: title.trim() || defaultTitle,
       });
 
-      setCreatedEmployee({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        role,
-        department,
-        title: title.trim() || defaultTitle,
-      });
-
-      if (onUserAdded) onUserAdded(res.user);
+      setSuccessMessage(res.message);
+      setEmail('');
+      setTitle('');
+      loadData();
+      if (onUserAdded && res.user) onUserAdded(res.user);
     } catch (err) {
-      setError(err.message || 'Failed to add employee');
+      setError(err.message || 'Failed to link employee email');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopyCredentials = () => {
-    if (!createdEmployee) return;
-    const text = `Discipl Workspace Credentials\n---------------------------\nName: ${createdEmployee.name}\nEmail: ${createdEmployee.email}\nPassword: ${createdEmployee.password}\nRole: ${createdEmployee.role}\nLogin at: ${window.location.origin}`;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleApprovePendingUser = async (user) => {
+    try {
+      setLoading(true);
+      await api.approveAccessRequest(user.id, {
+        role: user.role || 'employee',
+        department: user.department || 'Engineering & Tech',
+        title: user.title || 'Software Engineer'
+      });
+      loadData();
+      if (onUserAdded) onUserAdded(user);
+    } catch (err) {
+      setError(err.message || 'Failed to approve user');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResetForm = () => {
-    setName('');
-    setEmail('');
-    setPassword('Welcome@2026');
-    setRole('employee');
-    setDepartment('Engineering & Tech');
-    setTitle('');
-    setError('');
-    setCreatedEmployee(null);
-    setCopied(false);
-  };
-
-  const handleClose = () => {
-    handleResetForm();
-    onClose();
+  const handleDeleteInvite = async (id) => {
+    try {
+      await api.deleteCompanyInvite(id);
+      loadData();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-colors">
         
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
+        {/* Header */}
+        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
-              <UserPlus className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-2xl bg-purple-100 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <UserPlus className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">
-                {createdEmployee ? 'Teammate Added' : 'Add Teammate to Discipl'}
-              </h3>
-              <p className="text-[10px] text-slate-400">
-                {createdEmployee ? 'Account created directly by Founder' : 'Manual employee addition by email'}
+              <h2 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white">
+                Link Teammate to Discipl
+              </h2>
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                Add employee work emails to grant workspace access
               </p>
             </div>
           </div>
           <button
-            onClick={handleClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        {/* Modal Navigation Tabs */}
+        <div className="flex border-b border-slate-100 dark:border-slate-800 px-5 pt-3 gap-2 bg-slate-50/30 dark:bg-slate-800/20 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('invite')}
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all ${
+              activeTab === 'invite'
+                ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Add by Email
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setActiveTab('pending')}
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'pending'
+                ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <span>Registered Waiting to Link</span>
+            {pendingUsers.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                {pendingUsers.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('preapproved')}
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'preapproved'
+                ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <span>Pre-Authorized Emails</span>
+            {preapprovedInvites.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-500 text-white">
+                {preapprovedInvites.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
           
           {error && (
-            <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
-              <span>{error}</span>
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+              <div className="flex-1 font-medium">{error}</div>
             </div>
           )}
 
-          {/* SUCCESS SCREEN WITH CREDENTIALS */}
-          {createdEmployee ? (
-            <div className="space-y-4">
-              <div className="text-center py-2">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2 shadow-xs">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <h4 className="font-bold text-slate-900 text-base">
-                  {createdEmployee.name} added successfully!
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Direct access granted. Share these credentials with the employee so they can log in immediately.
-                </p>
-              </div>
-
-              {/* Credentials Card */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-200/70">
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Employee Credentials</span>
-                  <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px]">
-                    Active (Approved)
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Email:</span>
-                  <span className="font-mono font-bold text-slate-800">{createdEmployee.email}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Password:</span>
-                  <span className="font-mono font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                    {createdEmployee.password}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Role:</span>
-                  <span className="font-semibold text-slate-700 capitalize">{createdEmployee.role.replace('_', ' ')}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Department:</span>
-                  <span className="font-semibold text-slate-700">{createdEmployee.department}</span>
-                </div>
-              </div>
-
-              {/* Copy Button */}
-              <button
-                type="button"
-                onClick={handleCopyCredentials}
-                className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                  copied
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                }`}
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Credentials Copied to Clipboard!' : 'Copy Login Details to Clipboard'}</span>
-              </button>
-
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleResetForm}
-                  className="flex-1 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold"
-                >
-                  + Add Another Employee
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
-                >
-                  Done
-                </button>
-              </div>
+          {successMessage && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-xs flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <div className="flex-1 font-medium">{successMessage}</div>
             </div>
-          ) : (
-            /* ADD EMPLOYEE FORM */
-            <form onSubmit={handleSubmit} className="space-y-3.5">
-              
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Full Name *
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Priya Nair"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 outline-hidden"
-                  />
-                </div>
+          )}
+
+          {/* TAB 1: ADD BY EMAIL */}
+          {activeTab === 'invite' && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 text-purple-900 dark:text-purple-300 text-xs flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
+                <span className="leading-relaxed">
+                  Enter the employee's work email. If the employee already registered with this email, they will be instantly linked into Discipl. If not, this email will be pre-authorized so they get instant access when they sign up!
+                </span>
               </div>
 
-              {/* Company Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Work Email Address *
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Employee Work Email *
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="email"
                     required
-                    placeholder="priya@discipl.com"
+                    placeholder="e.g. backend.dev@discipl.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 outline-hidden"
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/50 outline-hidden"
                   />
                 </div>
               </div>
 
-              {/* Role Selection */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Role in Discipl *
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { key: 'employee', label: 'Employee', icon: '💼' },
-                    { key: 'team_lead', label: 'Team Lead', icon: '🛡️' },
-                    { key: 'founder', label: 'Co-Founder', icon: '👑' },
-                  ].map((r) => (
-                    <button
-                      key={r.key}
-                      type="button"
-                      onClick={() => setRole(r.key)}
-                      className={`p-2.5 rounded-xl text-xs font-semibold border flex flex-col items-center gap-1 transition-all ${
-                        role === r.key
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200 font-bold shadow-xs'
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="text-base">{r.icon}</span>
-                      <span>{r.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Department & Job Title */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Workspace Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                  >
+                    <option value="employee">💼 Employee</option>
+                    <option value="team_lead">🛡️ Team Lead</option>
+                    <option value="founder">👑 Co-Founder</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Department
                   </label>
                   <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:border-indigo-500"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
                   >
-                    <option value="Engineering & Tech">Engineering</option>
-                    <option value="Product & Design">Design & Product</option>
-                    <option value="Marketing & Growth">Marketing</option>
+                    <option value="Engineering & Tech">Engineering & Tech</option>
+                    <option value="Product & Design">Product & Design</option>
+                    <option value="Marketing & Growth">Marketing & Growth</option>
                     <option value="Operations & Management">Operations</option>
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Job Title
-                  </label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Designation / Title (Optional)
+                </label>
+                <div className="relative">
+                  <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    placeholder={role === 'founder' ? 'Co-Founder' : role === 'team_lead' ? 'Team Lead' : 'e.g. Developer'}
+                    placeholder="e.g. Senior Backend Engineer"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs focus:border-indigo-500 outline-hidden"
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
                   />
                 </div>
               </div>
 
-              {/* Password */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700">
-                    Assign Password *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGeneratePassword}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    Generate Random
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter or generate a password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs font-mono focus:border-indigo-500 outline-hidden"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  The employee will use this password and their email to sign in directly.
-                </p>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
                 >
-                  {loading ? 'Adding Employee...' : 'Confirm & Add Teammate'}
+                  <UserPlus className="w-4 h-4" />
+                  <span>{loading ? 'Linking Email...' : 'Authorize & Link Email to Discipl'}</span>
                 </button>
               </div>
-
             </form>
           )}
 
+          {/* TAB 2: REGISTERED USERS WAITING TO BE LINKED */}
+          {activeTab === 'pending' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Employees who have self-registered and are waiting for your confirmation:
+                </p>
+                <button
+                  onClick={loadData}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLists ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {pendingUsers.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                  No registered employees waiting to be linked.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {pendingUsers.map((u) => (
+                    <div key={u.id} className="py-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={u.name} avatar={u.avatar} role={u.role} size="md" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{u.name}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{u.email}</p>
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+                            {u.title || u.role} • {u.department}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleApprovePendingUser(u)}
+                        disabled={loading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Link to Company</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: PRE-AUTHORIZED EMAILS */}
+          {activeTab === 'preapproved' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Emails you have pre-authorized for Discipl:
+                </p>
+                <button
+                  onClick={loadData}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLists ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {preapprovedInvites.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                  No pending email invites. Use the "Add by Email" tab to pre-authorize teammates!
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {preapprovedInvites.map((inv) => (
+                    <div key={inv.id} className="py-2.5 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{inv.email}</p>
+                        </div>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                          {inv.role} • {inv.department} • Added {new Date(inv.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteInvite(inv.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        title="Remove pre-authorized email"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
+
       </div>
     </div>
   );
