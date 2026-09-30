@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
 import { 
   Lock, 
   Mail, 
@@ -13,50 +12,50 @@ import {
   Sparkles,
   Info,
   ShieldCheck,
-  UserPlus,
-  ArrowRight
+  UserPlus
 } from 'lucide-react';
 import DisciplLogo from './DisciplLogo';
 
 export default function AuthView() {
   const { login, register } = useAuth();
-  
-  // Setup check (only relevant if 0 founders exist)
-  const [needsFounderSetup, setNeedsFounderSetup] = useState(false);
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   
   // Login fields
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Self-Registration fields (for employees / team leads)
+  // Registration fields
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regRole, setRegRole] = useState('employee');
+  const [regRole, setRegRole] = useState('employee'); // 'founder' | 'team_lead' | 'employee'
   const [regDepartment, setRegDepartment] = useState('Engineering & Tech');
   const [regTitle, setRegTitle] = useState('');
-
-  // Initial Founder setup fields (only for 1st founder)
-  const [founderName, setFounderName] = useState('');
-  const [founderEmail, setFounderEmail] = useState('');
-  const [founderPassword, setFounderPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
 
-  useEffect(() => {
-    async function checkSetup() {
-      try {
-        const status = await api.getSetupStatus();
-        setNeedsFounderSetup(Boolean(status?.needsFounderSetup));
-      } catch (e) {
-        console.error('Failed to check setup status', e);
+  // Handle Role selection and auto-adjust suggested Department / Title
+  const handleRoleChange = (newRole) => {
+    setRegRole(newRole);
+    if (newRole === 'founder') {
+      setRegDepartment('Executive Leadership');
+      if (!regTitle || regTitle === 'Software Engineer' || regTitle === 'Team Lead') {
+        setRegTitle('Founder & CEO');
+      }
+    } else if (newRole === 'team_lead') {
+      setRegDepartment('Engineering & Tech');
+      if (!regTitle || regTitle === 'Founder & CEO' || regTitle === 'Software Engineer') {
+        setRegTitle('Team Lead');
+      }
+    } else {
+      setRegDepartment('Engineering & Tech');
+      if (!regTitle || regTitle === 'Founder & CEO' || regTitle === 'Team Lead') {
+        setRegTitle('Software Engineer');
       }
     }
-    checkSetup();
-  }, []);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -88,7 +87,14 @@ export default function AuthView() {
       setLoading(true);
       setError('');
       setSuccessNotice('');
-      const defaultTitle = regRole === 'team_lead' ? 'Team Lead' : 'Software Engineer';
+      
+      const defaultTitle = 
+        regRole === 'founder' 
+          ? 'Founder & CEO' 
+          : regRole === 'team_lead' 
+          ? 'Team Lead' 
+          : 'Software Engineer';
+
       await register({
         name: regName.trim(),
         email: regEmail.trim(),
@@ -100,33 +106,6 @@ export default function AuthView() {
       setSuccessNotice('Account registered successfully! Welcome to Discipl.');
     } catch (err) {
       setError(err.message || 'Registration failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInitialFounderSetup = async (e) => {
-    e.preventDefault();
-    if (!founderName.trim() || !founderEmail.trim() || !founderPassword) {
-      setError('Please complete all fields to set up the company founder account.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-      setSuccessNotice('');
-      await register({
-        name: founderName.trim(),
-        email: founderEmail.trim(),
-        password: founderPassword,
-        role: 'founder',
-        title: 'Founder & CEO',
-        department: 'Executive Leadership',
-      });
-      setSuccessNotice('Company workspace initialized! Welcome Founder.');
-    } catch (err) {
-      setError(err.message || 'Setup failed');
     } finally {
       setLoading(false);
     }
@@ -153,48 +132,40 @@ export default function AuthView() {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="bg-white dark:bg-slate-900 py-8 px-6 sm:px-10 shadow-2xl rounded-3xl border border-slate-100 dark:border-slate-800 transition-colors">
           
-          {/* Header & Tabs */}
-          {!needsFounderSetup && (
-            <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 mb-6">
-              <button
-                type="button"
-                onClick={() => { setAuthMode('login'); setError(''); setSuccessNotice(''); }}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                  authMode === 'login'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('register'); setError(''); setSuccessNotice(''); }}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                  authMode === 'register'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                Create Account (രജിസ്ട്രേഷൻ)
-              </button>
-            </div>
-          )}
+          {/* Header Switch Tabs */}
+          <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 mb-6">
+            <button
+              type="button"
+              onClick={() => { setAuthMode('login'); setError(''); setSuccessNotice(''); }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                authMode === 'login'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Sign In (ലോഗിൻ)
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('register'); setError(''); setSuccessNotice(''); }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                authMode === 'register'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Register (രജിസ്ട്രേഷൻ)
+            </button>
+          </div>
 
           <div className="mb-6 text-center">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-              {needsFounderSetup 
-                ? 'Initial Founder Setup' 
-                : authMode === 'login' 
-                ? 'Sign In to Discipl' 
-                : 'Join Discipl Workspace'}
+              {authMode === 'login' ? 'Sign In to Discipl' : 'Create Your Account'}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {needsFounderSetup 
-                ? 'Create the primary executive account for your company.'
-                : authMode === 'login'
-                ? 'Enter your registered email and password.'
-                : 'Register your account with your own credentials.'}
+              {authMode === 'login'
+                ? 'Enter your work email and password to access workspace.'
+                : 'Select your role and set up your profile credentials.'}
             </p>
           </div>
 
@@ -213,79 +184,14 @@ export default function AuthView() {
             </div>
           )}
 
-          {/* INITIAL FOUNDER SETUP FORM (Only shown if company has zero founders) */}
-          {needsFounderSetup ? (
-            <form onSubmit={handleInitialFounderSetup} className="space-y-4">
-              <div className="p-3 bg-purple-50 dark:bg-purple-950/40 rounded-2xl border border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-300 text-xs flex items-center gap-2">
-                <Crown className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                <span>Registering as the initial Company Founder</span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Founder Name *
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Jasim"
-                    value={founderName}
-                    onChange={(e) => setFounderName(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Founder Work Email *
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="admin@discipl.com"
-                    value={founderEmail}
-                    onChange={(e) => setFounderEmail(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    placeholder="Create admin password"
-                    value={founderPassword}
-                    onChange={(e) => setFounderPassword(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
-              >
-                {loading ? 'Initializing...' : 'Initialize Founder Workspace'}
-              </button>
-            </form>
-          ) : authMode === 'login' ? (
-            /* STANDARD SIGN IN FORM */
+          {authMode === 'login' ? (
+            /* ======================================================== */
+            /* 1. STANDARD SIGN IN FORM                                */
+            /* ======================================================== */
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Work Email
+                  Work Email *
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -302,7 +208,7 @@ export default function AuthView() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Password
+                  Password *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -322,18 +228,20 @@ export default function AuthView() {
                 disabled={loading}
                 className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50"
               >
-                {loading ? 'Verifying...' : 'Sign In to Discipl'}
+                {loading ? 'Verifying...' : 'Sign In to Discipl (ലോഗിൻ)'}
               </button>
 
               <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-start gap-2.5">
                 <Info className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  New employee? Click <strong>Create Account</strong> above to register with your own password. Once registered, your company Founder links your email to the workspace.
+                  Don't have an account yet? Click <strong>Register (രജിസ്ട്രേഷൻ)</strong> above to create your profile and choose your role.
                 </p>
               </div>
             </form>
           ) : (
-            /* SELF-REGISTRATION FORM (Employees register with their own credentials!) */
+            /* ======================================================== */
+            /* 2. REGISTRATION FORM WITH ROLE SELECTION                 */
+            /* ======================================================== */
             <form onSubmit={handleRegister} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -344,7 +252,7 @@ export default function AuthView() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Alex Rivera"
+                    placeholder="e.g. Jasim"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
@@ -361,7 +269,7 @@ export default function AuthView() {
                   <input
                     type="email"
                     required
-                    placeholder="alex@discipl.com"
+                    placeholder="name@discipl.com"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
@@ -378,7 +286,7 @@ export default function AuthView() {
                   <input
                     type="password"
                     required
-                    placeholder="Set your secure password"
+                    placeholder="Set your password"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
@@ -386,21 +294,23 @@ export default function AuthView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Role
-                  </label>
-                  <select
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
-                  >
-                    <option value="employee">💼 Employee</option>
-                    <option value="team_lead">🛡️ Team Lead</option>
-                  </select>
-                </div>
+              {/* Role Selection Dropdown */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Select Your Role (റോൾ തിരഞ്ഞെടുക്കുക) *
+                </label>
+                <select
+                  value={regRole}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="founder">👑 Founder / Executive (ഫൗണ്ടർ)</option>
+                  <option value="team_lead">🛡️ Team Lead (ടീം ലീഡ്)</option>
+                  <option value="employee">💼 Employee / Specialist (എംപ്ലോയി)</option>
+                </select>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Department
@@ -410,26 +320,26 @@ export default function AuthView() {
                     onChange={(e) => setRegDepartment(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
                   >
+                    {regRole === 'founder' && (
+                      <option value="Executive Leadership">Executive Leadership</option>
+                    )}
                     <option value="Engineering & Tech">Engineering & Tech</option>
                     <option value="Product & Design">Product & Design</option>
                     <option value="Marketing & Growth">Marketing & Growth</option>
-                    <option value="Operations & Management">Operations</option>
+                    <option value="Operations & Management">Operations & Management</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Professional Title (Optional)
-                </label>
-                <div className="relative">
-                  <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Job Title
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Senior Backend Engineer"
+                    placeholder="e.g. Lead Developer"
                     value={regTitle}
                     onChange={(e) => setRegTitle(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-indigo-500 outline-hidden"
                   />
                 </div>
               </div>
@@ -440,13 +350,13 @@ export default function AuthView() {
                 className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{loading ? 'Registering...' : 'Complete Registration'}</span>
+                <span>{loading ? 'Creating Account...' : 'Complete Registration (അക്കൗണ്ട് ഉണ്ടാക്കുക)'}</span>
               </button>
 
               <div className="p-3 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
                 <span>
-                  <strong>Self-Registration:</strong> You choose your own password. Once registered, your company Founder links your email to authorize access.
+                  നിങ്ങൾ തിരഞ്ഞെടുക്കുന്ന റോൾ (Founder, Team Lead, Employee) അനുസരിച്ച് നിങ്ങളുടെ വർക്ക്‌സ്‌പേസ് ഡാഷ്‌ബോർഡ് തത്സമയം സജ്ജീകരിക്കപ്പെടും.
                 </span>
               </div>
             </form>

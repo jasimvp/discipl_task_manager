@@ -4,12 +4,11 @@ const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { generateToken, authMiddleware, requireRoles } = require('../auth');
 
-// Check setup status (detects if company needs initial Founder registration)
+// Check setup status (always false to allow normal sign-in / registration)
 router.get('/setup-status', (req, res) => {
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  const founderCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'founder'").get().count;
   res.json({
-    needsFounderSetup: founderCount === 0,
+    needsFounderSetup: false,
     totalUsers: userCount,
   });
 });
@@ -43,9 +42,7 @@ function generateStaticAvatar(name, role) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-// Register - Employees register themselves with their own password;
-// If Founder count is 0, registers as initial Founder.
-// If Founder already exists, checks if email was pre-approved by Founder, else status = 'pending_approval'.
+// Register - Users register themselves with their own chosen role and password
 router.post('/register', (req, res) => {
   const { name, email, password, role, title, department, team_id } = req.body;
 
@@ -59,33 +56,25 @@ router.post('/register', (req, res) => {
     return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
   }
 
-  const founderCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'founder'").get().count;
-  const isFirstFounder = founderCount === 0;
-
-  // Check if founder has pre-approved / invited this email
-  const invite = db.prepare('SELECT * FROM company_invites WHERE email = ?').get(cleanEmail);
-
-  let userStatus = 'pending';
+  // Support direct role selection: founder, team_lead, or employee
   let targetRole = role || 'employee';
-  let targetDept = department || 'Engineering & Tech';
-  let targetTitle = title || (targetRole === 'team_lead' ? 'Team Lead' : 'Software Engineer');
-
-  if (isFirstFounder) {
-    userStatus = 'approved';
-    targetRole = 'founder';
-    targetDept = 'Executive Leadership';
-    targetTitle = 'Founder & CEO';
-  } else if (invite) {
-    // Pre-authorized by Founder!
-    userStatus = 'approved';
-    targetRole = invite.role || targetRole;
-    targetDept = invite.department || targetDept;
-    targetTitle = invite.title || targetTitle;
-    // Remove consumed invite
-    try {
-      db.prepare('DELETE FROM company_invites WHERE id = ?').run(invite.id);
-    } catch (e) {}
+  if (!['founder', 'team_lead', 'employee'].includes(targetRole)) {
+    targetRole = 'employee';
   }
+
+  let targetDept = department || (targetRole === 'founder' ? 'Executive Leadership' : 'Engineering & Tech');
+  let targetTitle = title || (
+    targetRole === 'founder' ? 'Founder & CEO' :
+    targetRole === 'team_lead' ? 'Team Lead' : 'Software Engineer'
+  );
+
+  // Directly approve all registered accounts with their chosen role
+  const userStatus = 'approved';
+
+  // Consume any company invite if one was pre-created for this email
+  try {
+    db.prepare('DELETE FROM company_invites WHERE email = ?').run(cleanEmail);
+  } catch (e) {}
 
   const hashedPassword = bcrypt.hashSync(password, 10);
   const avatar = generateStaticAvatar(name, targetRole);
@@ -111,16 +100,14 @@ router.post('/register', (req, res) => {
   const newUser = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(newUserId);
   const token = generateToken(newUser);
 
-  if (req.io && userStatus === 'approved') {
+  if (req.io) {
     req.io.emit('user_added', newUser);
   }
 
   res.status(201).json({
     token,
     user: newUser,
-    message: userStatus === 'approved' 
-      ? 'Welcome to Discipl! Your account is active.' 
-      : 'Account created! Waiting for your company Founder to link your email to the workspace.',
+    message: 'Welcome to Discipl! Your account is active.',
   });
 });
 
