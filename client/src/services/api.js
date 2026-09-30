@@ -239,6 +239,19 @@ export const api = {
     return res.json();
   },
 
+  async completeStage(id, { deliverable_url, deliverable_notes } = {}) {
+    const res = await fetch(`${API_BASE}/tasks/${id}/complete-stage`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ deliverable_url, deliverable_notes }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to complete stage');
+    }
+    return res.json();
+  },
+
   async getCompanyInvites() {
     const res = await fetch(`${API_BASE}/auth/company-invites`, {
       headers: getHeaders(),

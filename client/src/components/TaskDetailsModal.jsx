@@ -16,12 +16,15 @@ import {
   ExternalLink,
   Link2,
   Paperclip,
-  MessageSquare,
   Lock,
   Unlock,
   Play,
   Pause,
-  Users
+  Users,
+  GitMerge,
+  ArrowRight,
+  Layers,
+  AlertCircle
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -53,6 +56,11 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
   const [deliverableInputUrl, setDeliverableInputUrl] = useState('');
   const [deliverableInputNotes, setDeliverableInputNotes] = useState('');
   const [savingDeliverable, setSavingDeliverable] = useState(false);
+
+  // Sequential Chain Stage completion state
+  const [stageDeliverableUrl, setStageDeliverableUrl] = useState('');
+  const [stageDeliverableNotes, setStageDeliverableNotes] = useState('');
+  const [completingStage, setCompletingStage] = useState(false);
 
   // Task Discussion & Comments state
   const [comments, setComments] = useState([]);
@@ -119,11 +127,13 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
     socket.on('task_comment_added', handleCommentAdded);
     socket.on('task_updated', handleTaskUpdated);
     socket.on('task_claimed', () => fetchTaskDetails());
+    socket.on('chain_stage_updated', () => fetchTaskDetails());
 
     return () => {
       socket.off('task_comment_added', handleCommentAdded);
       socket.off('task_updated', handleTaskUpdated);
       socket.off('task_claimed', () => fetchTaskDetails());
+      socket.off('chain_stage_updated', () => fetchTaskDetails());
     };
   }, [socket, taskId]);
 
@@ -139,6 +149,15 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
   
   const isAssignee = assigneesList.some((a) => a.id === user?.id) || task?.assigned_to === user?.id;
   const canReassign = isFounder || isLead;
+
+  // Sequential Chain variables
+  const isChain = Boolean(task?.is_chain);
+  const stages = task?.stages || [];
+  const activeStage = stages.find((s) => s.status === 'active');
+  const nextStage = activeStage ? stages.find((s) => s.stage_order > activeStage.stage_order) : null;
+  const isActiveStageAssignee = activeStage?.assigned_to === user?.id;
+  const canCompleteActiveStage = isActiveStageAssignee || isFounder || isLead;
+  const myPendingStage = stages.find((s) => s.assigned_to === user?.id && s.status === 'pending');
 
   // Concurrency Claim Lock checks
   const isClaimedByMe = task?.claimed_by === user?.id;
@@ -293,6 +312,27 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
     }
   };
 
+  // Handle completing stage in sequential chain workflow
+  const handleCompleteStage = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setCompletingStage(true);
+      setError('');
+      await api.completeStage(taskId, {
+        deliverable_url: stageDeliverableUrl.trim() || undefined,
+        deliverable_notes: stageDeliverableNotes.trim() || undefined,
+      });
+      setStageDeliverableUrl('');
+      setStageDeliverableNotes('');
+      await fetchTaskDetails();
+      if (onTaskUpdated) onTaskUpdated();
+    } catch (err) {
+      setError(err.message || 'Failed to complete stage');
+    } finally {
+      setCompletingStage(false);
+    }
+  };
+
   // Handle posting a comment
   const handlePostComment = async (e) => {
     e.preventDefault();
@@ -384,107 +424,328 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             </p>
           </div>
 
-          {/* CONCURRENCY CLAIM WORK LOCK BANNER */}
-          {isCompleted ? (
-            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                    Deliverable Completed
-                  </h4>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                    Completed and synced across all assignees!
-                  </p>
+          {/* ========================================================================= */}
+          {/* CASE A: SEQUENTIAL CHAIN WORKFLOW PIPELINE & STAGE HANDOFF               */}
+          {/* ========================================================================= */}
+          {isChain ? (
+            <div className="rounded-3xl border-2 border-purple-200 dark:border-purple-900/60 bg-linear-to-b from-purple-50/50 via-white to-slate-50 dark:from-purple-950/20 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                    <GitMerge className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Sequential Dependency Pipeline</span>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
+                        {stages.filter((s) => s.status === 'completed').length} / {stages.length} Done
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Work flows sequentially through stages. Each stage unlocks automatically once the prior stage submits deliverables.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
-                100% DONE
-              </span>
-            </div>
-          ) : isClaimedByOther ? (
-            <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-2 animate-in fade-in duration-200">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
+
+              {/* Stage Stepper List */}
+              <div className="space-y-3 pt-1">
+                {stages.map((st, idx) => {
+                  const isStCompleted = st.status === 'completed';
+                  const isStActive = st.status === 'active';
+                  const isStPending = st.status === 'pending';
+                  const isMine = st.assigned_to === user?.id;
+
+                  return (
+                    <div
+                      key={st.id || idx}
+                      className={`p-3.5 rounded-2xl border transition-all ${
+                        isStActive
+                          ? 'border-purple-400 dark:border-purple-600 bg-purple-50/80 dark:bg-purple-950/50 ring-2 ring-purple-400/20 shadow-xs'
+                          : isStCompleted
+                          ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div
+                            className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                              isStCompleted
+                                ? 'bg-emerald-600 text-white'
+                                : isStActive
+                                ? 'bg-purple-600 text-white ring-2 ring-purple-300 dark:ring-purple-700'
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {isStCompleted ? (
+                              <Check className="w-4 h-4 stroke-3" />
+                            ) : isStActive ? (
+                              <span>{st.stage_order}</span>
+                            ) : (
+                              <Lock className="w-3.5 h-3.5" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-xs text-slate-900 dark:text-white">
+                                {st.title}
+                              </h4>
+                              {isStCompleted && (
+                                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.2 rounded-full">
+                                  Completed
+                                </span>
+                              )}
+                              {isStActive && (
+                                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.2 rounded-full flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-ping" />
+                                  Active Stage
+                                </span>
+                              )}
+                              {isStPending && (
+                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/60 px-2 py-0.2 rounded-full flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  Waiting on Step {st.stage_order - 1}
+                                </span>
+                              )}
+                              {isMine && (
+                                <span className="text-[10px] font-extrabold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950/60 px-2 py-0.2 rounded-full">
+                                  Assigned to You
+                                </span>
+                              )}
+                            </div>
+
+                            {st.description && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                                {st.description}
+                              </p>
+                            )}
+
+                            {/* Specialist info */}
+                            <div className="flex items-center gap-2 mt-2">
+                              <UserAvatar name={st.assignee_name} avatar={st.assignee_avatar} role={st.assignee_role} size="xs" />
+                              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                {st.assignee_name} <span className="text-slate-400 font-normal">({st.assignee_title || st.assignee_role})</span>
+                              </span>
+                            </div>
+
+                            {/* Deliverable Proof & Notes if completed */}
+                            {isStCompleted && (st.deliverable_url || st.deliverable_notes) && (
+                              <div className="mt-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-emerald-100 dark:border-emerald-900/50 space-y-1">
+                                {st.deliverable_url && (
+                                  <a
+                                    href={st.deliverable_url.startsWith('http') ? st.deliverable_url : `https://${st.deliverable_url}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-bold text-emerald-700 dark:text-emerald-300 hover:underline text-[11px] flex items-center gap-1 truncate"
+                                  >
+                                    <ExternalLink className="w-3 h-3 shrink-0" />
+                                    <span className="truncate">{st.deliverable_url}</span>
+                                  </a>
+                                )}
+                                {st.deliverable_notes && (
+                                  <p className="text-[11px] text-slate-600 dark:text-slate-400 italic">
+                                    "{st.deliverable_notes}"
+                                  </p>
+                                )}
+                                {st.completed_at && (
+                                  <span className="text-[10px] text-slate-400 block">
+                                    Completed: {new Date(st.completed_at).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Stage Handoff / Completion Action Form */}
+              {activeStage && canCompleteActiveStage && (
+                <form
+                  onSubmit={handleCompleteStage}
+                  className="p-4 rounded-2xl bg-purple-100/70 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800 space-y-3 animate-in fade-in duration-200"
+                >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
-                      Deliverable In Progress by {task.claimed_by_name || 'Teammate'}
-                    </h4>
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                      Active Lock
+                    <span className="text-xs font-bold text-purple-900 dark:text-purple-200 uppercase tracking-wider">
+                      {isActiveStageAssignee
+                        ? `Your Stage is Active: ${activeStage.title}`
+                        : `Manager Handoff: Active Stage (${activeStage.title})`}
+                    </span>
+                    <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300">
+                      Step {activeStage.stage_order} of {stages.length}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
-                    ഓവർലാപ്പ് ഒഴിവാക്കാനായി ഈ ടാസ്ക് നിലവിൽ <strong>{task.claimed_by_name}</strong> വർക്ക് ചെയ്യുകയാണ്. {task.claimed_by_name} ഇത് കംപ്ലീറ്റ് ചെയ്യുമ്പോൾ നിങ്ങളുടെ ഡാഷ്‌ബോർഡിലും ഓട്ടോമാറ്റിക് ആയി കംപ്ലീറ്റ് ആയി സിങ്ക് ആകുന്നതാണ്.
+
+                  <p className="text-[11px] text-purple-800 dark:text-purple-300">
+                    {nextStage
+                      ? `Attach deliverable proof or notes below to complete your stage and automatically hand off to ${nextStage.assignee_name} (Step ${nextStage.stage_order}).`
+                      : `This is the final stage of the workflow. Completing this stage marks the entire deliverable 100% finished!`}
+                  </p>
+
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      placeholder="Asset / Deliverable URL (e.g. Figma file, GitHub branch/PR, preview link)..."
+                      value={stageDeliverableUrl}
+                      onChange={(e) => setStageDeliverableUrl(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="Handoff notes for the next specialist (e.g. 'Figma designs approved, API token attached')..."
+                      value={stageDeliverableNotes}
+                      onChange={(e) => setStageDeliverableNotes(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      disabled={completingStage}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {completingStage ? (
+                        <span>Handing Off...</span>
+                      ) : nextStage ? (
+                        <>
+                          <span>Complete Stage & Hand Off to Next Specialist</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Complete Final Stage & Finish Deliverable</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Waiting Notice for queued employee */}
+              {myPendingStage && !isActiveStageAssignee && (
+                <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                  <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                  <p className="text-xs text-slate-700 dark:text-slate-300">
+                    നിങ്ങൾ <strong>Step {myPendingStage.stage_order} ("{myPendingStage.title}")</strong> ലേക്ക് ഷെഡ്യൂൾ ചെയ്യപ്പെട്ടിരിക്കുന്നു. ഇതിന് മുൻപുള്ള സ്റ്റേജ് പൂർത്തിയാകുമ്പോൾ നിങ്ങൾക്ക് ഇൻസ്റ്റന്റ് നോട്ടിഫിക്കേഷൻ ലഭിക്കുന്നതാണ്.
                   </p>
                 </div>
-              </div>
+              )}
             </div>
-          ) : isClaimedByMe ? (
-            <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Play className="w-5 h-5" />
+          ) : (
+            /* ========================================================================= */
+            /* CASE B: STANDARD DELIVERABLE CONCURRENCY CLAIM WORK LOCK BANNER          */
+            /* ========================================================================= */
+            <>
+              {isCompleted ? (
+                <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-3.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                        Deliverable Completed
+                      </h4>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                        Completed and synced across all assignees!
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                    100% DONE
+                  </span>
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider">
-                    You are Actively Working on this Deliverable
-                  </h4>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                    Locked to prevent duplicate work. Teammates can see you are active.
-                  </p>
+              ) : isClaimedByOther ? (
+                <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                          Deliverable In Progress by {task.claimed_by_name || 'Teammate'}
+                        </h4>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                          Active Lock
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                        ഓവർലാപ്പ് ഒഴിവാക്കാനായി ഈ ടാസ്ക് നിലവിൽ <strong>{task.claimed_by_name}</strong> വർക്ക് ചെയ്യുകയാണ്. {task.claimed_by_name} ഇത് കംപ്ലീറ്റ് ചെയ്യുമ്പോൾ നിങ്ങളുടെ ഡാഷ്‌ബോർഡിലും ഓട്ടോമാറ്റിക് ആയി കംപ്ലീറ്റ് ആയി സിങ്ക് ആകുന്നതാണ്.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleReleaseClaim}
-                  disabled={claimingTask}
-                  className="px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <Pause className="w-3.5 h-3.5 inline mr-1" />
-                  Pause / Release
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleUpdateStatusAndProgress('completed', 100)}
-                  disabled={updatingStatus}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors"
-                >
-                  <Check className="w-3.5 h-3.5 inline mr-1" />
-                  Complete Task
-                </button>
-              </div>
-            </div>
-          ) : task?.status === 'todo' && isAssignee ? (
-            <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Play className="w-5 h-5" />
+              ) : isClaimedByMe ? (
+                <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Play className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider">
+                        You are Actively Working on this Deliverable
+                      </h4>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                        Locked to prevent duplicate work. Teammates can see you are active.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleReleaseClaim}
+                      disabled={claimingTask}
+                      className="px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Pause className="w-3.5 h-3.5 inline mr-1" />
+                      Pause / Release
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateStatusAndProgress('completed', 100)}
+                      disabled={updatingStatus}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5 inline mr-1" />
+                      Complete Task
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
-                    Ready to Start Working?
-                  </h4>
-                  <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
-                    Clicking "Start Task" locks the task so other assignees know work is underway.
-                  </p>
+              ) : task?.status === 'todo' && isAssignee ? (
+                <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Play className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                        Ready to Start Working?
+                      </h4>
+                      <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                        Clicking "Start Task" locks the task so other assignees know work is underway.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClaimTask}
+                    disabled={claimingTask}
+                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  >
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>{claimingTask ? 'Locking Task...' : 'Start Working (Claim Task)'}</span>
+                  </button>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleClaimTask}
-                disabled={claimingTask}
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 shrink-0"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                <span>{claimingTask ? 'Locking Task...' : 'Start Working (Claim Task)'}</span>
-              </button>
-            </div>
-          ) : null}
+              ) : null}
+            </>
+          )}
 
           {/* REASSIGNMENT REQUEST BANNER */}
           {task?.rejection_status === 'requested' && (

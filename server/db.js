@@ -131,6 +131,22 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS task_chain_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      stage_order INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      assigned_to INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed')),
+      deliverable_url TEXT,
+      deliverable_notes TEXT,
+      completed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Safe migrations for existing database
@@ -145,6 +161,12 @@ function initDb() {
   } catch (e) {}
   try {
     db.exec('ALTER TABLE tasks ADD COLUMN claimed_at DATETIME');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN is_chain INTEGER DEFAULT 0');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN active_stage_index INTEGER DEFAULT 0');
   } catch (e) {}
   try {
     // Backfill task_assignees from existing tasks.assigned_to

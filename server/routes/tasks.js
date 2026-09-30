@@ -17,10 +17,44 @@ function getTaskAssignees(taskId) {
   }
 }
 
-// Helper to enrich task with assignees and claim lock details
+// Helper to get sequential workflow stages for a task
+function getTaskStages(taskId) {
+  try {
+    return db.prepare(`
+      SELECT s.*,
+             u.name as assignee_name, u.avatar as assignee_avatar, u.role as assignee_role, u.title as assignee_title, u.email as assignee_email
+      FROM task_chain_stages s
+      JOIN users u ON s.assigned_to = u.id
+      WHERE s.task_id = ?
+      ORDER BY s.stage_order ASC
+    `).all(taskId);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Helper to enrich task with assignees, chain stages, and claim lock details
 function enrichTask(task) {
   if (!task) return null;
   const assignees = getTaskAssignees(task.id);
+  const stages = task.is_chain ? getTaskStages(task.id) : [];
+
+  // If chain, ensure all stage assignees are included in the assignees array
+  if (stages.length > 0) {
+    for (const stage of stages) {
+      if (!assignees.some((a) => a.id === stage.assigned_to)) {
+        assignees.push({
+          id: stage.assigned_to,
+          name: stage.assignee_name,
+          avatar: stage.assignee_avatar,
+          role: stage.assignee_role,
+          title: stage.assignee_title,
+          email: stage.assignee_email,
+        });
+      }
+    }
+  }
+
   // Ensure primary assignee is in the list
   if (task.assigned_to && !assignees.some((a) => a.id === task.assigned_to)) {
     const primary = db.prepare('SELECT id, name, email, role, title, avatar FROM users WHERE id = ?').get(task.assigned_to);
@@ -37,8 +71,12 @@ function enrichTask(task) {
     }
   }
 
+  const active_stage = stages.find((s) => s.status === 'active') || null;
+
   return {
     ...task,
+    stages,
+    active_stage,
     assignees,
     claimed_by_name,
     claimed_by_avatar,
@@ -194,27 +232,34 @@ router.get('/:id', authMiddleware, (req, res) => {
   res.json({ ...task, activities, comments });
 });
 
-// CREATE task (Founders and Team Leads) - Supports multi-assignee
+// CREATE task (Founders and Team Leads) - Supports multi-assignee and sequential workflow chains
 router.post('/', authMiddleware, (req, res) => {
   const user = req.user;
   if (user.role !== 'founder' && user.role !== 'team_lead') {
     return res.status(403).json({ error: 'Only Founders and Team Leaders can assign tasks' });
   }
 
-  const { title, description, priority, assigned_to, assigned_to_ids, team_id, due_date } = req.body;
+  const { title, description, priority, assigned_to, assigned_to_ids, team_id, due_date, is_chain, stages } = req.body;
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Task title is required' });
   }
 
+  const isChainTask = Boolean(is_chain && Array.isArray(stages) && stages.length > 0);
+
   // Build assignee list
   let assigneesList = [];
-  if (Array.isArray(assigned_to_ids) && assigned_to_ids.length > 0) {
+  if (isChainTask) {
+    const stageAssignees = stages.map(s => Number(s.assigned_to)).filter(Boolean);
+    assigneesList = [...new Set(stageAssignees)];
+  } else if (Array.isArray(assigned_to_ids) && assigned_to_ids.length > 0) {
     assigneesList = assigned_to_ids.map(Number).filter(Boolean);
   } else if (assigned_to) {
     assigneesList = [Number(assigned_to)];
   }
 
-  const primaryAssignee = assigneesList[0] || null;
+  const primaryAssignee = isChainTask && stages[0]?.assigned_to
+    ? Number(stages[0].assigned_to)
+    : (assigneesList[0] || null);
 
   let finalTeamId = team_id;
   if (!finalTeamId && primaryAssignee) {
@@ -223,8 +268,8 @@ router.post('/', authMiddleware, (req, res) => {
   }
 
   const stmt = db.prepare(`
-    INSERT INTO tasks (title, description, status, priority, assigned_to, assigned_by, team_id, due_date, progress_pct, rejection_status)
-    VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, 0, 'none')
+    INSERT INTO tasks (title, description, status, priority, assigned_to, assigned_by, team_id, due_date, progress_pct, rejection_status, is_chain, active_stage_index)
+    VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, 0, 'none', ?, 0)
   `);
 
   const result = stmt.run(
@@ -234,7 +279,8 @@ router.post('/', authMiddleware, (req, res) => {
     primaryAssignee,
     user.id,
     finalTeamId || null,
-    due_date || null
+    due_date || null,
+    isChainTask ? 1 : 0
   );
 
   const taskId = result.lastInsertRowid;
@@ -243,19 +289,65 @@ router.post('/', authMiddleware, (req, res) => {
   const insertAssigneeStmt = db.prepare('INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)');
   for (const uid of assigneesList) {
     insertAssigneeStmt.run(taskId, uid);
-    if (uid !== user.id) {
-      addNotification(
-        uid,
-        'New Deliverable Assigned',
-        `${user.name} assigned you a deliverable: "${title.trim()}"`,
-        'task_assigned',
-        taskId
-      );
-    }
   }
 
-  // Record activity
-  recordActivity(taskId, user.id, 'task_created', `Task created with ${assigneesList.length} assignee(s) by ${user.name}`);
+  // If chain workflow, insert stages and notify
+  if (isChainTask) {
+    const insertStageStmt = db.prepare(`
+      INSERT INTO task_chain_stages (task_id, stage_order, title, description, assigned_to, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stages.forEach((stage, idx) => {
+      const order = idx + 1;
+      const status = idx === 0 ? 'active' : 'pending';
+      insertStageStmt.run(
+        taskId,
+        order,
+        stage.title || `Stage ${order}`,
+        stage.description || '',
+        Number(stage.assigned_to),
+        status
+      );
+
+      // Notification
+      if (Number(stage.assigned_to) !== user.id) {
+        if (idx === 0) {
+          addNotification(
+            Number(stage.assigned_to),
+            'Sequential Workflow: Stage 1 Active 🚀',
+            `${user.name} assigned you to initiate Stage 1 ("${stage.title}") of "${title.trim()}". Work starts with you!`,
+            'chain_stage_active',
+            taskId
+          );
+        } else {
+          addNotification(
+            Number(stage.assigned_to),
+            `Queued in Sequential Workflow (Step ${order}) ⏳`,
+            `${user.name} queued you for Step ${order} ("${stage.title}") of "${title.trim()}". You will be notified automatically once earlier stages are done.`,
+            'chain_stage_queued',
+            taskId
+          );
+        }
+      }
+    });
+
+    recordActivity(taskId, user.id, 'chain_workflow_created', `Sequential chain workflow created with ${stages.length} stages by ${user.name}`);
+  } else {
+    // Normal notifications for regular task
+    for (const uid of assigneesList) {
+      if (uid !== user.id) {
+        addNotification(
+          uid,
+          'New Deliverable Assigned',
+          `${user.name} assigned you a deliverable: "${title.trim()}"`,
+          'task_assigned',
+          taskId
+        );
+      }
+    }
+    recordActivity(taskId, user.id, 'task_created', `Task created with ${assigneesList.length} assignee(s) by ${user.name}`);
+  }
 
   const newTask = getFullTask(taskId);
 
@@ -369,7 +461,189 @@ router.post('/:id/release-claim', authMiddleware, (req, res) => {
     req.io.emit('task_updated', updatedTask);
   }
 
-  res.json({ message: 'Task claim released.', task: updatedTask });
+// COMPLETE ACTIVE STAGE IN CHAIN WORKFLOW - Handoff to next stage!
+router.post('/:id/complete-stage', authMiddleware, (req, res) => {
+  const taskId = req.params.id;
+  const user = req.user;
+  const { deliverable_url, deliverable_notes } = req.body;
+
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  if (!task.is_chain) {
+    return res.status(400).json({ error: 'This task is not a sequential chain workflow.' });
+  }
+
+  // Find currently active stage
+  const activeStage = db.prepare(`
+    SELECT * FROM task_chain_stages
+    WHERE task_id = ? AND status = 'active'
+    ORDER BY stage_order ASC
+    LIMIT 1
+  `).get(taskId);
+
+  if (!activeStage) {
+    return res.status(400).json({ error: 'No active stage found to complete.' });
+  }
+
+  // Authorization check: Must be assigned to this stage, or be founder / team_lead
+  const isStageAssignee = activeStage.assigned_to === user.id;
+  const isFounder = user.role === 'founder';
+  const isLead = user.role === 'team_lead';
+
+  if (!isStageAssignee && !isFounder && !isLead) {
+    return res.status(403).json({ error: 'You are not authorized to complete this active stage.' });
+  }
+
+  // Mark current stage completed with deliverable notes and URL
+  db.prepare(`
+    UPDATE task_chain_stages
+    SET status = 'completed',
+        deliverable_url = ?,
+        deliverable_notes = ?,
+        completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(deliverable_url ? deliverable_url.trim() : null, deliverable_notes || '', activeStage.id);
+
+  // Check if there is a next stage
+  const nextStage = db.prepare(`
+    SELECT * FROM task_chain_stages
+    WHERE task_id = ? AND stage_order > ?
+    ORDER BY stage_order ASC
+    LIMIT 1
+  `).get(taskId, activeStage.stage_order);
+
+  // Count total stages and completed stages to calculate accurate progress %
+  const totalStages = db.prepare('SELECT COUNT(*) as count FROM task_chain_stages WHERE task_id = ?').get(taskId).count;
+  const completedStages = db.prepare("SELECT COUNT(*) as count FROM task_chain_stages WHERE task_id = ? AND status = 'completed'").get(taskId).count;
+  const progressPct = Math.min(100, Math.round((completedStages / totalStages) * 100));
+
+  if (nextStage) {
+    // Unlock next stage!
+    db.prepare(`
+      UPDATE task_chain_stages
+      SET status = 'active'
+      WHERE id = ?
+    `).run(nextStage.id);
+
+    // Update main task to point to next stage assignee and advance index
+    db.prepare(`
+      UPDATE tasks
+      SET assigned_to = ?,
+          status = 'in_progress',
+          progress_pct = ?,
+          active_stage_index = active_stage_index + 1,
+          claimed_by = NULL,
+          claimed_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(nextStage.assigned_to, progressPct, taskId);
+
+    // Get next assignee user info
+    const nextUser = db.prepare('SELECT id, name FROM users WHERE id = ?').get(nextStage.assigned_to);
+
+    recordActivity(
+      taskId,
+      user.id,
+      'chain_stage_completed',
+      `Completed Step ${activeStage.stage_order} ("${activeStage.title}"). Unlocked Step ${nextStage.stage_order} ("${nextStage.title}") for ${nextUser?.name || 'next assignee'}.`
+    );
+
+    // Add discussion message documenting handoff
+    try {
+      db.prepare(`
+        INSERT INTO task_comments (task_id, user_id, content)
+        VALUES (?, ?, ?)
+      `).run(
+        taskId,
+        user.id,
+        `🏁 Completed Step ${activeStage.stage_order}: "${activeStage.title}"\n${deliverable_notes ? `📝 Deliverable Notes: ${deliverable_notes}\n` : ''}${deliverable_url ? `🔗 Asset/Link: ${deliverable_url}\n` : ''}👉 Unlocked Step ${nextStage.stage_order}: "${nextStage.title}" for @${nextUser?.name || 'teammate'}`
+      );
+    } catch (e) {}
+
+    // Send notification to next assignee
+    if (nextStage.assigned_to !== user.id) {
+      addNotification(
+        nextStage.assigned_to,
+        'Your Turn! Stage Unlocked 🚀',
+        `${user.name} completed "${activeStage.title}". Step ${nextStage.stage_order} ("${nextStage.title}") is now active and ready for you!`,
+        'chain_stage_unlocked',
+        taskId
+      );
+    }
+
+    // Send notification to creator
+    if (task.assigned_by && task.assigned_by !== user.id && task.assigned_by !== nextStage.assigned_to) {
+      addNotification(
+        task.assigned_by,
+        'Stage Completed in Pipeline 📊',
+        `${user.name} completed Stage ${activeStage.stage_order} ("${activeStage.title}"). Handed off to ${nextUser?.name}.`,
+        'chain_stage_progress',
+        taskId
+      );
+    }
+
+  } else {
+    // All stages finished! Complete the entire task!
+    db.prepare(`
+      UPDATE tasks
+      SET status = 'completed',
+          progress_pct = 100,
+          completed_at = CURRENT_TIMESTAMP,
+          claimed_by = NULL,
+          claimed_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(taskId);
+
+    recordActivity(
+      taskId,
+      user.id,
+      'chain_completed',
+      `Completed final Stage ${activeStage.stage_order} ("${activeStage.title}"). Entire sequential workflow completed! 🎉`
+    );
+
+    try {
+      db.prepare(`
+        INSERT INTO task_comments (task_id, user_id, content)
+        VALUES (?, ?, ?)
+      `).run(
+        taskId,
+        user.id,
+        `🎉 Final Step ${activeStage.stage_order}: "${activeStage.title}" completed! The full sequential chain workflow is now complete.`
+      );
+    } catch (e) {}
+
+    // Notify all participants
+    const allAssignees = db.prepare('SELECT user_id FROM task_assignees WHERE task_id = ?').all(taskId);
+    const recipientIds = new Set(allAssignees.map((a) => a.user_id));
+    if (task.assigned_by) recipientIds.add(task.assigned_by);
+    recipientIds.delete(user.id);
+
+    for (const rid of recipientIds) {
+      addNotification(
+        rid,
+        'Sequential Workflow Completed! 🎉',
+        `All stages of "${task.title}" have been completed! Finished by ${user.name}.`,
+        'chain_all_completed',
+        taskId
+      );
+    }
+  }
+
+  const updatedTask = getFullTask(taskId);
+
+  if (req.io) {
+    req.io.emit('task_updated', updatedTask);
+    req.io.emit('chain_stage_updated', { taskId: Number(taskId), activeStage, nextStage: nextStage || null });
+  }
+
+  res.json({
+    message: nextStage ? 'Stage completed and next stage unlocked!' : 'All stages completed! Deliverable finished.',
+    task: updatedTask
+  });
 });
 
 // UPDATE task status / progress - Synced completion across all assignees!
@@ -759,6 +1033,10 @@ router.delete('/:id', authMiddleware, (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
+  db.prepare('DELETE FROM task_chain_stages WHERE task_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM task_assignees WHERE task_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM task_activities WHERE task_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM task_comments WHERE task_id = ?').run(req.params.id);
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
 
   if (req.io) {

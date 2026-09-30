@@ -17,7 +17,8 @@ import {
   Link2,
   ExternalLink,
   Lock,
-  Users
+  Users,
+  GitMerge
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -72,6 +73,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
     socket.on('task_reassigned', handleSync);
     socket.on('rejection_requested', handleSync);
     socket.on('task_deleted', handleSync);
+    socket.on('chain_stage_updated', handleSync);
 
     return () => {
       socket.off('task_created', handleSync);
@@ -80,6 +82,7 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
       socket.off('task_reassigned', handleSync);
       socket.off('rejection_requested', handleSync);
       socket.off('task_deleted', handleSync);
+      socket.off('chain_stage_updated', handleSync);
     };
   }, [socket]);
 
@@ -381,6 +384,12 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                                       Proof
                                     </span>
                                   )}
+                                  {t.is_chain === 1 && (
+                                    <span className="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-purple-200 dark:border-purple-800">
+                                      <GitMerge className="w-3 h-3 text-purple-600" />
+                                      <span>{t.active_stage ? `Step ${t.active_stage.stage_order}` : 'Pipeline'}</span>
+                                    </span>
+                                  )}
                                 </div>
                                 {isRejected && (
                                   <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300 animate-pulse">
@@ -531,6 +540,12 @@ export default function TaskBoardView({ onOpenCreateTask, onSelectTask }) {
                           <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200 dark:border-amber-800">
                             <Lock className="w-2.5 h-2.5 text-amber-600" />
                             {t.claimed_by_name}
+                          </span>
+                        )}
+                        {t.is_chain === 1 && (
+                          <span className="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-purple-200 dark:border-purple-800">
+                            <GitMerge className="w-3 h-3 text-purple-600" />
+                            <span>{t.active_stage ? `Step ${t.active_stage.stage_order}` : 'Pipeline'}</span>
                           </span>
                         )}
                       </div>

@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Link2,
   UserPlus,
-  Lock
+  Lock,
+  GitMerge
 } from 'lucide-react';
 import DisciplLogo from './DisciplLogo';
 import UserAvatar from './UserAvatar';
@@ -68,6 +69,7 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
     socket.on('task_deleted', handleSync);
     socket.on('access_approved', handleSync);
     socket.on('user_added', handleSync);
+    socket.on('chain_stage_updated', handleSync);
 
     return () => {
       socket.off('task_created', handleSync);
@@ -78,6 +80,7 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
       socket.off('task_deleted', handleSync);
       socket.off('access_approved', handleSync);
       socket.off('user_added', handleSync);
+      socket.off('chain_stage_updated', handleSync);
     };
   }, [socket]);
 
@@ -322,6 +325,12 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                               <span className="bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200 dark:border-indigo-800">
                                 <Link2 className="w-3 h-3 text-indigo-500" />
                                 Deliverable Attached
+                              </span>
+                            )}
+                            {t.is_chain === 1 && (
+                              <span className="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-purple-200 dark:border-purple-800">
+                                <GitMerge className="w-3 h-3 text-purple-600" />
+                                <span>{t.active_stage ? `Step ${t.active_stage.stage_order}: ${t.active_stage.title}` : 'Pipeline'}</span>
                               </span>
                             )}
                             {t.claimed_by_name && t.status === 'in_progress' && (
