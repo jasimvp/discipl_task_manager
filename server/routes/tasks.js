@@ -461,6 +461,9 @@ router.post('/:id/release-claim', authMiddleware, (req, res) => {
     req.io.emit('task_updated', updatedTask);
   }
 
+  res.json({ message: 'Task claim released.', task: updatedTask });
+});
+
 // COMPLETE ACTIVE STAGE IN CHAIN WORKFLOW - Handoff to next stage!
 router.post('/:id/complete-stage', authMiddleware, (req, res) => {
   const taskId = req.params.id;
