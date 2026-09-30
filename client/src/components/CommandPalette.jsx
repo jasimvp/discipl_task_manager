@@ -88,13 +88,13 @@ export default function CommandPalette({
           },
         ]
       : []),
-    ...(isFounder && onOpenAddEmployee
+    ...((isFounder || isLead) && onOpenAddEmployee
       ? [
           {
             id: 'action-add-employee',
             type: 'nav',
-            title: '+ Add Teammate / Employee',
-            description: 'Directly add an employee or team lead using their work email',
+            title: isLead ? '+ Add Member to Team' : '+ Add Teammate / Employee',
+            description: isLead ? 'Add an employee directly to your team' : 'Directly add an employee or team lead using their work email',
             icon: UserPlus,
             action: () => onOpenAddEmployee(),
             keywords: ['add', 'employee', 'teammate', 'invite', 'user', 'member', 'hire'],

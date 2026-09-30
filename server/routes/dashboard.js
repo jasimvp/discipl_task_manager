@@ -6,22 +6,38 @@ const { authMiddleware } = require('../auth');
 router.get('/stats', authMiddleware, (req, res) => {
   const user = req.user;
 
-  // Overview stats
-  const totalTasks = db.prepare('SELECT COUNT(*) as count FROM tasks').get().count;
-  const completedTasks = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'completed'").get().count;
-  const inProgressTasks = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'in_progress'").get().count;
-  const todoTasks = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'todo'").get().count;
-  const pendingRejections = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE rejection_status = 'requested'").get().count;
+  const isFounder = user.role === 'founder';
+  const isLead = user.role === 'team_lead';
+
+  let taskFilter = '1=1';
+  const taskParams = [];
+  if (!isFounder && user.team_id) {
+    taskFilter = 'team_id = ?';
+    taskParams.push(user.team_id);
+  }
+
+  // Overview stats (scoped to team for team leads)
+  const totalTasks = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE ${taskFilter}`).get(...taskParams).count;
+  const completedTasks = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE ${taskFilter} AND status = 'completed'`).get(...taskParams).count;
+  const inProgressTasks = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE ${taskFilter} AND status = 'in_progress'`).get(...taskParams).count;
+  const todoTasks = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE ${taskFilter} AND status = 'todo'`).get(...taskParams).count;
+  const pendingRejections = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE ${taskFilter} AND rejection_status = 'requested'`).get(...taskParams).count;
 
   // Average progress percentage of incomplete tasks
-  const avgProgressRow = db.prepare("SELECT AVG(progress_pct) as avg_progress FROM tasks WHERE status != 'completed'").get();
+  const avgProgressRow = db.prepare(`SELECT AVG(progress_pct) as avg_progress FROM tasks WHERE ${taskFilter} AND status != 'completed'`).get(...taskParams);
   const avgProgress = avgProgressRow && avgProgressRow.avg_progress !== null ? Math.round(avgProgressRow.avg_progress) : 0;
 
   // Overall completion rate
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Status breakdown for founders/team leads
-  // Employee-wise status and workload
+  // Employee-wise status and workload (scoped to user's team + founders for non-founders)
+  let empWhere = "WHERE u.status = 'approved'";
+  const empParams = [];
+  if (!isFounder) {
+    empWhere += " AND (u.role = 'founder' OR u.team_id = ?)";
+    empParams.push(user.team_id || 0);
+  }
+
   const employeeStats = db.prepare(`
     SELECT u.id, u.name, u.avatar, u.role, u.title, u.department,
            t.name as team_name,
@@ -34,11 +50,19 @@ router.get('/stats', authMiddleware, (req, res) => {
     FROM users u
     LEFT JOIN teams t ON u.team_id = t.id
     LEFT JOIN tasks tk ON tk.assigned_to = u.id
+    ${empWhere}
     GROUP BY u.id
     ORDER BY total_tasks DESC, u.name ASC
-  `).all();
+  `).all(...empParams);
 
-  // Team summary
+  // Team summary (scoped to user's team for non-founders)
+  let teamWhere = '';
+  const teamParams = [];
+  if (!isFounder) {
+    teamWhere = 'WHERE tm.id = ?';
+    teamParams.push(user.team_id || 0);
+  }
+
   const teamStats = db.prepare(`
     SELECT tm.id, tm.name,
            COUNT(tk.id) as total_tasks,
@@ -47,17 +71,26 @@ router.get('/stats', authMiddleware, (req, res) => {
            SUM(CASE WHEN tk.status = 'todo' THEN 1 ELSE 0 END) as todo_tasks
     FROM teams tm
     LEFT JOIN tasks tk ON tk.team_id = tm.id
+    ${teamWhere}
     GROUP BY tm.id
-  `).all();
+  `).all(...teamParams);
 
   // Priority breakdown
   const priorityStats = db.prepare(`
     SELECT priority, COUNT(*) as count
     FROM tasks
+    WHERE ${taskFilter}
     GROUP BY priority
-  `).all();
+  `).all(...taskParams);
 
-  // Recent pending rejection tasks for quick Founder/TL review
+  // Recent pending rejection tasks
+  let rejWhere = "WHERE t.rejection_status = 'requested'";
+  const rejParams = [];
+  if (!isFounder && user.team_id) {
+    rejWhere += ' AND t.team_id = ?';
+    rejParams.push(user.team_id);
+  }
+
   const pendingRejectionTasks = db.prepare(`
     SELECT t.id, t.title, t.priority, t.rejection_reason, t.rejected_at,
            u.name as assigned_to_name, u.avatar as assigned_to_avatar,
@@ -65,9 +98,9 @@ router.get('/stats', authMiddleware, (req, res) => {
     FROM tasks t
     JOIN users u ON t.assigned_to = u.id
     JOIN users c ON t.assigned_by = c.id
-    WHERE t.rejection_status = 'requested'
+    ${rejWhere}
     ORDER BY t.rejected_at DESC
-  `).all();
+  `).all(...rejParams);
 
   // If user is employee, also return personal summary
   let mySummary = null;

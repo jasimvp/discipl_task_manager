@@ -60,22 +60,23 @@ export default function MessagesView({ initialUserId }) {
 
     socket.on('new_message', (msg) => {
       // Check if message belongs to current open chat
-      if (selectedTeam && msg.team_id === selectedTeam.id) {
-        setMessages((prev) => [...prev, msg]);
+      if (activeTab === 'teams' && selectedTeam && msg.team_id === selectedTeam.id && !msg.recipient_id) {
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       } else if (
+        activeTab === 'direct' &&
         selectedUser &&
         !msg.team_id &&
         ((msg.sender_id === selectedUser.id && msg.recipient_id === user?.id) ||
          (msg.sender_id === user?.id && msg.recipient_id === selectedUser.id))
       ) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [user, selectedTeam, selectedUser]);
+  }, [user, selectedTeam, selectedUser, activeTab]);
 
   // Load initial teams and default selection
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function MessagesView({ initialUserId }) {
       try {
         const teamList = await api.getTeams();
         setTeams(teamList);
-        if (teamList.length > 0 && !selectedTeam && !selectedUser) {
+        if (teamList.length > 0 && !selectedTeam && !selectedUser && activeTab === 'teams') {
           setSelectedTeam(teamList[0]);
         }
       } catch (e) {
@@ -97,11 +98,11 @@ export default function MessagesView({ initialUserId }) {
   const fetchMessages = async () => {
     try {
       setLoading(true);
-      if (selectedTeam) {
+      if (activeTab === 'teams' && selectedTeam) {
         if (socketRef.current) socketRef.current.emit('join_team', selectedTeam.id);
         const data = await api.getTeamMessages(selectedTeam.id);
         setMessages(data);
-      } else if (selectedUser) {
+      } else if (activeTab === 'direct' && selectedUser) {
         const data = await api.getDirectMessages(selectedUser.id);
         setMessages(data);
       }
@@ -113,10 +114,10 @@ export default function MessagesView({ initialUserId }) {
   };
 
   useEffect(() => {
-    if (selectedTeam || selectedUser) {
+    if ((activeTab === 'teams' && selectedTeam) || (activeTab === 'direct' && selectedUser)) {
       fetchMessages();
     }
-  }, [selectedTeam, selectedUser]);
+  }, [selectedTeam, selectedUser, activeTab]);
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -129,11 +130,18 @@ export default function MessagesView({ initialUserId }) {
 
     try {
       setSending(true);
-      const payload = {
-        content: inputMessage.trim(),
-        team_id: selectedTeam ? selectedTeam.id : null,
-        recipient_id: selectedUser ? selectedUser.id : null,
-      };
+      const isDirect = activeTab === 'direct' && Boolean(selectedUser);
+      const payload = isDirect
+        ? {
+            content: inputMessage.trim(),
+            recipient_id: selectedUser.id,
+            team_id: null,
+          }
+        : {
+            content: inputMessage.trim(),
+            team_id: selectedTeam ? selectedTeam.id : null,
+            recipient_id: null,
+          };
 
       const newMsg = await api.sendMessage(payload);
       // Append if not received via socket
@@ -174,9 +182,9 @@ export default function MessagesView({ initialUserId }) {
             <button
               onClick={() => {
                 setActiveTab('teams');
+                setSelectedUser(null);
                 if (teams.length > 0 && !selectedTeam) {
                   setSelectedTeam(teams[0]);
-                  setSelectedUser(null);
                 }
               }}
               className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
@@ -189,10 +197,10 @@ export default function MessagesView({ initialUserId }) {
             <button
               onClick={() => {
                 setActiveTab('direct');
-                const firstUser = availableUsers.find((u) => u.id !== user?.id);
-                if (firstUser && !selectedUser) {
-                  setSelectedUser(firstUser);
-                  setSelectedTeam(null);
+                setSelectedTeam(null);
+                if (!selectedUser) {
+                  const firstUser = availableUsers.find((u) => u.id !== user?.id);
+                  if (firstUser) setSelectedUser(firstUser);
                 }
               }}
               className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${

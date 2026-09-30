@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   X,
   UserPlus,
@@ -15,13 +16,21 @@ import {
   Clock,
   Trash2,
   RefreshCw,
-  Send
+  Send,
+  Lock,
+  Users
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
 export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
-  const [activeTab, setActiveTab] = useState('invite'); // 'invite' | 'pending' | 'preapproved'
+  const { user } = useAuth();
+  const isFounder = user?.role === 'founder';
+  const isLead = user?.role === 'team_lead';
+
+  const [activeTab, setActiveTab] = useState('invite'); // 'invite' | 'unassigned' | 'pending' | 'preapproved'
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('employee');
   const [department, setDepartment] = useState('Engineering & Tech');
   const [title, setTitle] = useState('');
@@ -30,20 +39,28 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Pending users and preapproved invites
+  // Pending users, preapproved invites, unassigned
   const [pendingUsers, setPendingUsers] = useState([]);
   const [preapprovedInvites, setPreapprovedInvites] = useState([]);
+  const [unassignedEmployees, setUnassignedEmployees] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
 
   const loadData = async () => {
     try {
       setLoadingLists(true);
-      const [pending, invites] = await Promise.all([
-        api.getPendingUsers().catch(() => []),
-        api.getCompanyInvites().catch(() => [])
-      ]);
-      setPendingUsers(pending || []);
-      setPreapprovedInvites(invites || []);
+      const promises = [
+        api.getUnassignedEmployees().catch(() => [])
+      ];
+      if (isFounder) {
+        promises.push(api.getPendingUsers().catch(() => []));
+        promises.push(api.getCompanyInvites().catch(() => []));
+      }
+      const results = await Promise.all(promises);
+      setUnassignedEmployees(results[0] || []);
+      if (isFounder) {
+        setPendingUsers(results[1] || []);
+        setPreapprovedInvites(results[2] || []);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -53,12 +70,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
 
   useEffect(() => {
     if (isOpen) {
+      setName('');
       setEmail('');
+      setPassword('');
       setRole('employee');
-      setDepartment('Engineering & Tech');
+      setDepartment(user?.department || 'Engineering & Tech');
       setTitle('');
       setError('');
       setSuccessMessage('');
+      setActiveTab('invite');
       loadData();
     }
   }, [isOpen]);
@@ -83,34 +103,58 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
         : 'Software Engineer';
 
       const res = await api.addEmployee({
+        name: name.trim(),
         email: email.trim().toLowerCase(),
-        role,
-        department,
+        password: password.trim(),
+        role: isLead ? 'employee' : role,
+        department: isLead ? (user?.department || 'Engineering & Tech') : department,
+        team_id: isLead ? user?.team_id : undefined,
         title: title.trim() || defaultTitle,
       });
 
       setSuccessMessage(res.message);
+      setName('');
       setEmail('');
+      setPassword('');
       setTitle('');
       loadData();
       if (onUserAdded && res.user) onUserAdded(res.user);
     } catch (err) {
-      setError(err.message || 'Failed to link employee email');
+      setError(err.message || 'Failed to add employee');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprovePendingUser = async (user) => {
+  const handleClaimUnassigned = async (targetEmp) => {
     try {
       setLoading(true);
-      await api.approveAccessRequest(user.id, {
-        role: user.role || 'employee',
-        department: user.department || 'Engineering & Tech',
-        title: user.title || 'Software Engineer'
+      setError('');
+      const targetTeamId = isLead ? user?.team_id : undefined;
+      const res = await api.addExistingMemberToTeam({
+        user_id: targetEmp.id,
+        team_id: targetTeamId,
+      });
+      setSuccessMessage(res.message);
+      loadData();
+      if (onUserAdded && res.user) onUserAdded(res.user);
+    } catch (err) {
+      setError(err.message || 'Failed to add member to team');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprovePendingUser = async (u) => {
+    try {
+      setLoading(true);
+      await api.approveAccessRequest(u.id, {
+        role: u.role || 'employee',
+        department: u.department || 'Engineering & Tech',
+        title: u.title || 'Software Engineer'
       });
       loadData();
-      if (onUserAdded) onUserAdded(user);
+      if (onUserAdded) onUserAdded(u);
     } catch (err) {
       setError(err.message || 'Failed to approve user');
     } finally {
@@ -139,10 +183,10 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
             </div>
             <div>
               <h2 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white">
-                Link Teammate to Discipl
+                {isLead ? 'Add Member to Team' : 'Link Teammate to Discipl'}
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
-                Add employee work emails to grant workspace access
+                {isLead ? `Add a new member to ${user?.department || 'your team'}` : 'Add employee work emails to grant workspace access'}
               </p>
             </div>
           </div>
@@ -155,52 +199,75 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-5 pt-3 gap-2 bg-slate-50/30 dark:bg-slate-800/20 shrink-0">
+        <div className="flex border-b border-slate-100 dark:border-slate-800 px-5 pt-3 gap-2 bg-slate-50/30 dark:bg-slate-800/20 shrink-0 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('invite')}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all ${
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${
               activeTab === 'invite'
                 ? 'border-purple-600 text-purple-600 dark:text-purple-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Add by Email
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setActiveTab('pending')}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'pending'
-                ? 'border-purple-600 text-purple-600 dark:text-purple-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            <span>Registered Waiting to Link</span>
-            {pendingUsers.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
-                {pendingUsers.length}
-              </span>
-            )}
+            {isLead ? '+ Add New Member' : '+ Add by Email'}
           </button>
 
+          {/* Unassigned Teammates tab (available to Team Leads and Founders) */}
           <button
             type="button"
-            onClick={() => setActiveTab('preapproved')}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'preapproved'
+            onClick={() => setActiveTab('unassigned')}
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              activeTab === 'unassigned'
                 ? 'border-purple-600 text-purple-600 dark:text-purple-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <span>Pre-Authorized Emails</span>
-            {preapprovedInvites.length > 0 && (
+            <Users className="w-3.5 h-3.5" />
+            <span>Unassigned Employees</span>
+            {unassignedEmployees.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-500 text-white">
-                {preapprovedInvites.length}
+                {unassignedEmployees.length}
               </span>
             )}
           </button>
+          
+          {isFounder && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('pending')}
+              className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                activeTab === 'pending'
+                  ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <span>Registered Waiting</span>
+              {pendingUsers.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                  {pendingUsers.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {isFounder && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('preapproved')}
+              className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                activeTab === 'preapproved'
+                  ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <span>Pre-Authorized Emails</span>
+              {preapprovedInvites.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-500 text-white">
+                  {preapprovedInvites.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Content Body */}
@@ -220,14 +287,32 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
             </div>
           )}
 
-          {/* TAB 1: ADD BY EMAIL */}
+          {/* TAB 1: ADD NEW MEMBER / INVITE BY EMAIL */}
           {activeTab === 'invite' && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 text-purple-900 dark:text-purple-300 text-xs flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
                 <span className="leading-relaxed">
-                  Enter the employee's work email. If the employee already registered with this email, they will be instantly linked into Discipl. If not, this email will be pre-authorized so they get instant access when they sign up!
+                  {isLead
+                    ? 'Enter the member\'s details. If you provide a password, their account is instantly activated so they can log in right away!'
+                    : 'Enter the employee\'s work email. If they already registered, they will be instantly linked. Or provide a password to create their account immediately!'}
                 </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Full Name (Optional)
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Rahul Sharma"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/50 outline-hidden"
+                  />
+                </div>
               </div>
 
               <div>
@@ -247,36 +332,68 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Initial Password (Optional - for instant activation)
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    placeholder="Provide a password for instant login"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                  If left blank, the email is pre-authorized so the employee can sign up on their own without waiting for approvals.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Workspace Role
                   </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
-                  >
-                    <option value="employee">💼 Employee</option>
-                    <option value="team_lead">🛡️ Team Lead</option>
-                    <option value="founder">👑 Co-Founder</option>
-                  </select>
+                  {isLead ? (
+                    <div className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                      <span>💼 Employee</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(Team member)</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                    >
+                      <option value="employee">💼 Employee</option>
+                      <option value="team_lead">🛡️ Team Lead</option>
+                      <option value="founder">👑 Co-Founder</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Department
                   </label>
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
-                  >
-                    <option value="Engineering & Tech">Engineering & Tech</option>
-                    <option value="Product & Design">Product & Design</option>
-                    <option value="Marketing & Growth">Marketing & Growth</option>
-                    <option value="Operations & Management">Operations</option>
-                  </select>
+                  {isLead ? (
+                    <div className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold truncate">
+                      {user?.department || 'My Department'}
+                    </div>
+                  ) : (
+                    <select
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                    >
+                      <option value="Engineering & Tech">Engineering & Tech</option>
+                      <option value="Product & Design">Product & Design</option>
+                      <option value="Marketing & Growth">Marketing & Growth</option>
+                      <option value="Operations & Management">Operations</option>
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -288,7 +405,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                   <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    placeholder="e.g. Senior Backend Engineer"
+                    placeholder="e.g. Senior Frontend Developer"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
@@ -303,14 +420,71 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>{loading ? 'Linking Email...' : 'Authorize & Link Email to Discipl'}</span>
+                  <span>
+                    {loading
+                      ? 'Processing...'
+                      : password.trim()
+                      ? 'Create & Activate Account Instantly'
+                      : isLead
+                      ? 'Add Member to Team'
+                      : 'Authorize & Link Email to Discipl'}
+                  </span>
                 </button>
               </div>
             </form>
           )}
 
-          {/* TAB 2: REGISTERED USERS WAITING TO BE LINKED */}
-          {activeTab === 'pending' && (
+          {/* TAB: UNASSIGNED EMPLOYEES (Available to Team Lead & Founder) */}
+          {activeTab === 'unassigned' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Approved employees currently not assigned to any specific team:
+                </p>
+                <button
+                  onClick={loadData}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLists ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {unassignedEmployees.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                  No unassigned employees found. All active members are already in teams!
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {unassignedEmployees.map((emp) => (
+                    <div key={emp.id} className="py-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={emp.name} avatar={emp.avatar} role={emp.role} size="md" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{emp.name}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{emp.email}</p>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                            {emp.title || 'Employee'} • {emp.department || 'No department'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleClaimUnassigned(emp)}
+                        disabled={loading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Add to My Team</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: REGISTERED USERS WAITING TO BE LINKED (Founder only) */}
+          {activeTab === 'pending' && isFounder && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -358,8 +532,8 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
             </div>
           )}
 
-          {/* TAB 3: PRE-AUTHORIZED EMAILS */}
-          {activeTab === 'preapproved' && (
+          {/* TAB 3: PRE-AUTHORIZED EMAILS (Founder only) */}
+          {activeTab === 'preapproved' && isFounder && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">

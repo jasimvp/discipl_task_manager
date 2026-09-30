@@ -53,13 +53,13 @@ export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser,
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {isFounder && onOpenAddEmployee && (
+          {(isFounder || isLead) && onOpenAddEmployee && (
             <button
               onClick={onOpenAddEmployee}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-600/30 transition-all active:scale-95"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Add Teammate</span>
+              <span>{isLead ? 'Add Team Member' : 'Add Teammate'}</span>
             </button>
           )}
 

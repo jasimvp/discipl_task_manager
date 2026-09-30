@@ -152,14 +152,14 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
           </div>
 
           <div className="flex items-center gap-3 shrink-0 flex-wrap">
-            {/* Founder Add Teammate by Email */}
-            {isFounder && (
+            {/* Founder & Lead Add Teammate by Email */}
+            {(isFounder || isLead) && (
               <button
                 onClick={onOpenAddEmployee}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all active:scale-95"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Link Teammate</span>
+                <span>{isLead ? 'Add Member' : 'Link Teammate'}</span>
               </button>
             )}
 

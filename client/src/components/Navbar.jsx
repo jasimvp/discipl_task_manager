@@ -221,16 +221,16 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               </>
             )}
 
-            {/* Founder Quick Add Teammate Button */}
-            {isFounder && onOpenAddEmployee && (
+            {/* Founder / Team Lead Quick Add Teammate Button */}
+            {(isFounder || isLead) && onOpenAddEmployee && (
               <button
                 type="button"
                 onClick={onOpenAddEmployee}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
-                title="Add Employee / Teammate by Email"
+                title={isLead ? "Add Member to Team" : "Add Employee / Teammate by Email"}
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>Link Teammate</span>
+                <span>{isLead ? 'Add Member' : 'Link Teammate'}</span>
               </button>
             )}
 
@@ -471,13 +471,13 @@ export default function Navbar({ activeTab, setActiveTab, onOpenCommandPalette, 
               <span>{isLead ? 'My Team' : 'Team Directory'}</span>
             </button>
 
-            {isFounder && onOpenAddEmployee && (
+            {(isFounder || isLead) && onOpenAddEmployee && (
               <button
                 onClick={() => { onOpenAddEmployee(); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 hover:bg-purple-100"
               >
                 <UserPlus className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span>+ Link Teammate by Email</span>
+                <span>{isLead ? '+ Add Team Member' : '+ Link Teammate by Email'}</span>
               </button>
             )}
           </div>

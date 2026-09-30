@@ -76,6 +76,12 @@ router.post('/register', (req, res) => {
     db.prepare('DELETE FROM company_invites WHERE email = ?').run(cleanEmail);
   } catch (e) {}
 
+  let finalTeamId = team_id ? Number(team_id) : null;
+  if (!finalTeamId && targetDept) {
+    const matchingTeam = db.prepare('SELECT id FROM teams WHERE name = ?').get(targetDept);
+    if (matchingTeam) finalTeamId = matchingTeam.id;
+  }
+
   const hashedPassword = bcrypt.hashSync(password, 10);
   const avatar = generateStaticAvatar(name, targetRole);
 
@@ -91,12 +97,20 @@ router.post('/register', (req, res) => {
     targetRole,
     targetTitle.trim(),
     targetDept.trim(),
-    team_id ? Number(team_id) : null,
+    finalTeamId,
     avatar,
     userStatus
   );
 
   const newUserId = result.lastInsertRowid;
+
+  // If registering as Team Lead, assign as team lead if not already assigned
+  if (targetRole === 'team_lead' && finalTeamId) {
+    try {
+      db.prepare('UPDATE teams SET lead_id = ? WHERE id = ? AND lead_id IS NULL').run(newUserId, finalTeamId);
+    } catch (e) {}
+  }
+
   const newUser = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(newUserId);
   const token = generateToken(newUser);
 
@@ -149,9 +163,10 @@ router.get('/me', authMiddleware, (req, res) => {
   res.json(user);
 });
 
-// List all active approved users
+// List all active approved users (scoped to team members & founders for non-founders)
 router.get('/users', authMiddleware, (req, res) => {
-  const users = db.prepare(`
+  const user = req.user;
+  let query = `
     SELECT u.id, u.name, u.email, u.role, u.title, u.department, u.team_id, u.avatar, u.status,
            t.name as team_name,
            (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND status != 'completed') as active_tasks_count,
@@ -159,13 +174,24 @@ router.get('/users', authMiddleware, (req, res) => {
     FROM users u
     LEFT JOIN teams t ON u.team_id = t.id
     WHERE u.status = 'approved'
-    ORDER BY 
-      CASE u.role 
-        WHEN 'founder' THEN 1 
-        WHEN 'team_lead' THEN 2 
-        WHEN 'employee' THEN 3 
-      END, u.name ASC
-  `).all();
+  `;
+  const params = [];
+
+  // Team-based user privacy:
+  // Non-founders only see founders and members of their own team!
+  if (user.role !== 'founder') {
+    query += ` AND (u.role = 'founder' OR u.team_id = ?)`;
+    params.push(user.team_id || 0);
+  }
+
+  query += ` ORDER BY 
+    CASE u.role 
+      WHEN 'founder' THEN 1 
+      WHEN 'team_lead' THEN 2 
+      WHEN 'employee' THEN 3 
+    END, u.name ASC`;
+
+  const users = db.prepare(query).all(...params);
   res.json(users);
 });
 
@@ -258,17 +284,25 @@ router.post('/access-requests/:id/reject', authMiddleware, requireRoles('founder
   res.json({ message: `Access request from ${targetUser.name} was rejected.` });
 });
 
-// FOUNDER: Add / Link Employee to Company by Email (No password required!)
-router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('founder'), (req, res) => {
-  const { email, role, title, department, team_id, name } = req.body;
+// FOUNDER & TEAM LEAD: Add / Link Employee to Company / Team by Email
+router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('founder', 'team_lead'), (req, res) => {
+  const { email, role, title, department, team_id, name, password } = req.body;
 
   if (!email || !email.trim()) {
     return res.status(400).json({ error: 'Employee work email is required' });
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const targetRole = role || 'employee';
-  const targetDept = department || 'Engineering & Tech';
+  const isLead = req.user.role === 'team_lead';
+
+  // Team Leads can only add employees to their own team
+  const targetRole = isLead ? 'employee' : (role || 'employee');
+  const targetDept = isLead ? (req.user.department || 'Engineering & Tech') : (department || 'Engineering & Tech');
+  let finalTeamId = isLead ? req.user.team_id : (team_id ? Number(team_id) : null);
+  if (!finalTeamId && targetDept) {
+    const t = db.prepare('SELECT id FROM teams WHERE name = ?').get(targetDept);
+    if (t) finalTeamId = t.id;
+  }
   const targetTitle = title || (targetRole === 'founder' ? 'Co-Founder' : targetRole === 'team_lead' ? 'Team Lead' : 'Software Engineer');
 
   // Check if user is already registered in Discipl
@@ -276,10 +310,17 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
 
   if (existingUser) {
     if (existingUser.status === 'approved') {
+      // If user has no team, Team Lead can claim them into their team!
+      if (isLead && !existingUser.team_id) {
+        db.prepare('UPDATE users SET team_id = ?, department = ? WHERE id = ?').run(finalTeamId, targetDept, existingUser.id);
+        const updated = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(existingUser.id);
+        if (req.io) req.io.emit('user_added', updated);
+        return res.json({ message: `${existingUser.name} has been added to your team!`, user: updated, linkedExisting: true });
+      }
       return res.status(400).json({ error: `User with email "${cleanEmail}" is already an active member of Discipl.` });
     }
 
-    // User is currently pending - Founder links and approves them immediately!
+    // User is currently pending - Link and approve them immediately!
     db.prepare(`
       UPDATE users
       SET status = 'approved',
@@ -288,12 +329,12 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
           title = ?,
           team_id = COALESCE(?, team_id)
       WHERE id = ?
-    `).run(targetRole, targetDept, targetTitle, team_id ? Number(team_id) : null, existingUser.id);
+    `).run(targetRole, targetDept, targetTitle, finalTeamId, existingUser.id);
 
     try {
       db.prepare(`
         INSERT INTO notifications (user_id, title, message, type)
-        VALUES (?, 'Discipl Workspace Linked', 'The Founder has linked your email and approved your workspace access!', 'access_approved')
+        VALUES (?, 'Discipl Workspace Linked', 'You have been linked and approved for the Discipl workspace!', 'access_approved')
       `).run(existingUser.id);
     } catch (e) {}
 
@@ -305,14 +346,35 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
     }
 
     return res.json({
-      message: `Employee ${existingUser.name} (${cleanEmail}) has been linked and approved for the Discipl workspace!`,
+      message: `Employee ${existingUser.name} (${cleanEmail}) has been linked and approved for the team!`,
       user: updatedUser,
       linkedExisting: true
     });
   }
 
-  // User has not registered yet: Pre-authorize their email in company_invites!
-  // When they register with their own password, they will be instantly approved into the workspace.
+  // If password provided, directly create approved account!
+  if (password && password.trim()) {
+    const hashedPassword = bcrypt.hashSync(password.trim(), 10);
+    const memberName = name && name.trim() ? name.trim() : cleanEmail.split('@')[0];
+    const avatar = generateStaticAvatar(memberName, targetRole);
+
+    const result = db.prepare(`
+      INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved')
+    `).run(memberName, cleanEmail, hashedPassword, targetRole, targetTitle, targetDept, finalTeamId, avatar);
+
+    const newUser = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(result.lastInsertRowid);
+    if (req.io) {
+      req.io.emit('user_added', newUser);
+    }
+    return res.status(201).json({
+      message: `Team member ${newUser.name} (${cleanEmail}) has been created and added to the team!`,
+      user: newUser,
+      linkedExisting: false
+    });
+  }
+
+  // Pre-authorize invite
   const existingInvite = db.prepare('SELECT id FROM company_invites WHERE email = ?').get(cleanEmail);
   if (existingInvite) {
     db.prepare(`
@@ -328,7 +390,7 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
   }
 
   res.status(201).json({
-    message: `Email "${cleanEmail}" is now pre-authorized for Discipl! As soon as the employee registers with this email, they will automatically be linked with active access.`,
+    message: `Email "${cleanEmail}" is now pre-authorized for your team! As soon as the employee registers, they will be automatically placed in your team.`,
     invite: {
       email: cleanEmail,
       role: targetRole,
@@ -336,6 +398,55 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
       title: targetTitle
     },
     linkedExisting: false
+  });
+});
+
+// FOUNDER & TEAM LEAD: Get unassigned employees available to be added to team
+router.get('/unassigned-employees', authMiddleware, requireRoles('founder', 'team_lead'), (req, res) => {
+  const users = db.prepare(`
+    SELECT u.id, u.name, u.email, u.role, u.title, u.department, u.avatar
+    FROM users u
+    WHERE u.status = 'approved' AND u.role = 'employee' AND (u.team_id IS NULL OR u.team_id = 0)
+    ORDER BY u.name ASC
+  `).all();
+  res.json(users);
+});
+
+// FOUNDER & TEAM LEAD: Add existing unassigned employee to team
+router.post('/teams/add-existing-member', authMiddleware, requireRoles('founder', 'team_lead'), (req, res) => {
+  const { user_id, team_id } = req.body;
+  const caller = req.user;
+
+  const targetTeamId = caller.role === 'team_lead' ? caller.team_id : (team_id ? Number(team_id) : caller.team_id);
+  if (!targetTeamId) {
+    return res.status(400).json({ error: 'Please specify a valid team' });
+  }
+
+  const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(targetTeamId);
+  if (!team) {
+    return res.status(404).json({ error: 'Team not found' });
+  }
+
+  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(user_id));
+  if (!targetUser) {
+    return res.status(404).json({ error: 'Employee not found' });
+  }
+
+  db.prepare(`
+    UPDATE users
+    SET team_id = ?, department = ?
+    WHERE id = ?
+  `).run(targetTeamId, team.name, targetUser.id);
+
+  const updatedUser = db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(targetUser.id);
+
+  if (req.io) {
+    req.io.emit('user_added', updatedUser);
+  }
+
+  res.json({
+    message: `${targetUser.name} has been added to ${team.name}!`,
+    user: updatedUser
   });
 });
 
@@ -355,17 +466,26 @@ router.delete('/users/:id', authMiddleware, requireRoles('founder'), (req, res) 
   res.json({ message: 'User access revoked and deleted' });
 });
 
-// Teams list
+// Teams list (Founder sees all, Team Lead & Employee see their team)
 router.get('/teams', authMiddleware, (req, res) => {
-  const teams = db.prepare(`
+  const user = req.user;
+  let query = `
     SELECT t.id, t.name, t.description, t.lead_id,
            u.name as lead_name, u.avatar as lead_avatar,
            (SELECT COUNT(*) FROM users WHERE team_id = t.id) as member_count,
            (SELECT COUNT(*) FROM tasks WHERE team_id = t.id) as task_count
     FROM teams t
     LEFT JOIN users u ON t.lead_id = u.id
-    ORDER BY t.name ASC
-  `).all();
+  `;
+  const params = [];
+
+  if (user.role !== 'founder') {
+    query += ` WHERE t.id = ?`;
+    params.push(user.team_id || 0);
+  }
+
+  query += ` ORDER BY t.name ASC`;
+  const teams = db.prepare(query).all(...params);
   res.json(teams);
 });
 

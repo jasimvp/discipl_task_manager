@@ -120,6 +120,27 @@ export const api = {
     return this.inviteUser(userData);
   },
 
+  async getUnassignedEmployees() {
+    const res = await fetch(`${API_BASE}/auth/unassigned-employees`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch unassigned employees');
+    return res.json();
+  },
+
+  async addExistingMemberToTeam(data) {
+    const res = await fetch(`${API_BASE}/auth/teams/add-existing-member`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add member to team');
+    }
+    return res.json();
+  },
+
   async deleteUser(userId) {
     const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
       method: 'DELETE',
