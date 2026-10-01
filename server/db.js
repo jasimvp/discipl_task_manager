@@ -8,13 +8,33 @@ const isPostgres = !!process.env.DATABASE_URL;
 
 let pool = null;
 let sqliteDb = null;
+let initDbPromise = null;
+
+// Automatically handles special characters in password in postgres URI
+function sanitizeDatabaseUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  const match = url.match(/^(postgres(?:ql)?:\/\/)([^:]+):(.*)@([^@]+)$/);
+  if (!match) return url;
+  const proto = match[1];
+  const user = match[2];
+  const rawPassword = match[3];
+  const hostAndDb = match[4];
+  let cleanPass;
+  try {
+    cleanPass = encodeURIComponent(decodeURIComponent(rawPassword));
+  } catch (e) {
+    cleanPass = encodeURIComponent(rawPassword);
+  }
+  return proto + user + ':' + cleanPass + '@' + hostAndDb;
+}
 
 if (isPostgres) {
   const { Pool, types } = require('pg');
   // Parse BIGINT (e.g. COUNT(*)) as standard JS numbers instead of strings
   types.setTypeParser(20, (val) => parseInt(val, 10));
 
-  const connectionString = process.env.DATABASE_URL;
+  const rawConnectionString = process.env.DATABASE_URL;
+  const connectionString = sanitizeDatabaseUrl(rawConnectionString);
   const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
 
   pool = new Pool({
@@ -22,7 +42,7 @@ if (isPostgres) {
     ssl: isLocal ? false : { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
   });
 
   console.log('📡 Connected to Supabase PostgreSQL cloud database.');
@@ -77,24 +97,27 @@ const db = {
 
       return {
         async get(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
           const res = await pool.query(pgSql, params);
           return res.rows[0] !== undefined ? res.rows[0] : undefined;
         },
         async all(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
           const res = await pool.query(pgSql, params);
           return res.rows;
         },
         async run(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
-          let execSql = pgSql;
+          let execSql = pgSql.trim().replace(/;$/, '');
           if (isInsert && !hasReturning) {
             execSql += ' RETURNING id';
           }
           const res = await pool.query(execSql, params);
           return {
-            lastInsertRowid: res.rows[0]?.id || null,
+            lastInsertRowid: res.rows[0]?.id || res.rows[0]?.ID || null,
             changes: res.rowCount || 0,
           };
         },
@@ -103,14 +126,17 @@ const db = {
       const stmt = sqliteDb.prepare(sql);
       return {
         async get(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
           return stmt.get(...params);
         },
         async all(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
           return stmt.all(...params);
         },
         async run(...args) {
+          if (initDbPromise) await initDbPromise;
           const params = normalizeArgs(args);
           return stmt.run(...params);
         },
@@ -119,6 +145,7 @@ const db = {
   },
 
   async exec(sql) {
+    if (initDbPromise) await initDbPromise;
     if (isPostgres) {
       await pool.query(sql);
     } else {
@@ -131,8 +158,8 @@ const db = {
 async function initDb() {
   if (isPostgres) {
     try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS users (
+      const tables = [
+        `CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
@@ -144,17 +171,15 @@ async function initDb() {
           avatar TEXT,
           status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('approved', 'pending', 'rejected')),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS teams (
+        )`,
+        `CREATE TABLE IF NOT EXISTS teams (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
           lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
           description TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS tasks (
+        )`,
+        `CREATE TABLE IF NOT EXISTS tasks (
           id SERIAL PRIMARY KEY,
           title TEXT NOT NULL,
           description TEXT,
@@ -176,27 +201,24 @@ async function initDb() {
           active_stage_index INTEGER DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS task_activities (
+        )`,
+        `CREATE TABLE IF NOT EXISTS task_activities (
           id SERIAL PRIMARY KEY,
           task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           activity_type TEXT NOT NULL,
           details TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS messages (
+        )`,
+        `CREATE TABLE IF NOT EXISTS messages (
           id SERIAL PRIMARY KEY,
           sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           recipient_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
           team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
           content TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS notifications (
+        )`,
+        `CREATE TABLE IF NOT EXISTS notifications (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
@@ -205,27 +227,24 @@ async function initDb() {
           task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
           is_read INTEGER DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS task_comments (
+        )`,
+        `CREATE TABLE IF NOT EXISTS task_comments (
           id SERIAL PRIMARY KEY,
           task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           content TEXT NOT NULL,
           deliverable_url TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS task_assignees (
+        )`,
+        `CREATE TABLE IF NOT EXISTS task_assignees (
           id SERIAL PRIMARY KEY,
           task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           role_tag TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(task_id, user_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS company_invites (
+        )`,
+        `CREATE TABLE IF NOT EXISTS company_invites (
           id SERIAL PRIMARY KEY,
           email TEXT UNIQUE NOT NULL,
           role TEXT NOT NULL DEFAULT 'employee',
@@ -233,9 +252,8 @@ async function initDb() {
           title TEXT,
           created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS task_chain_stages (
+        )`,
+        `CREATE TABLE IF NOT EXISTS task_chain_stages (
           id SERIAL PRIMARY KEY,
           task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
           stage_order INTEGER NOT NULL,
@@ -247,8 +265,12 @@ async function initDb() {
           deliverable_notes TEXT,
           completed_at TIMESTAMP,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+        )`
+      ];
+
+      for (const tableSql of tables) {
+        await pool.query(tableSql);
+      }
 
       // Seed default teams if empty in Postgres
       const teamCountRes = await pool.query('SELECT COUNT(*) as count FROM teams');
@@ -432,6 +454,6 @@ async function initDb() {
 }
 
 // Start database initialization
-initDb();
+initDbPromise = initDb();
 
 module.exports = { db, initDb };

@@ -118,7 +118,18 @@ router.post('/register', async (req, res) => {
       } catch (e) {}
     }
 
-    const newUser = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(newUserId);
+    let newUser = null;
+    if (newUserId) {
+      newUser = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(newUserId);
+    }
+    if (!newUser) {
+      newUser = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE email = ?').get(cleanEmail);
+    }
+
+    if (!newUser) {
+      throw new Error('Account was created but could not be retrieved from database.');
+    }
+
     const token = generateToken(newUser);
 
     if (req.io) {
@@ -132,7 +143,7 @@ router.post('/register', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in registration:', err);
-    res.status(500).json({ error: 'Registration failed. Please try again.' });
+    res.status(500).json({ error: err.message || 'Registration failed. Please try again.' });
   }
 });
 
@@ -159,7 +170,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Error during login:', err);
-    res.status(500).json({ error: 'Login failed. Please try again.' });
+    res.status(500).json({ error: err.message || 'Login failed. Please try again.' });
   }
 });
 
