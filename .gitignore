@@ -5,6 +5,7 @@ client/dist
 .DS_Store
 *.log
 .env
+*.db
 *.db-shm
 *.db-wal
 data/

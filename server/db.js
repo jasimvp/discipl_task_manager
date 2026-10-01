@@ -1,193 +1,437 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'taskmanager.db');
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+const isPostgres = !!process.env.DATABASE_URL;
+
+let pool = null;
+let sqliteDb = null;
+
+if (isPostgres) {
+  const { Pool, types } = require('pg');
+  // Parse BIGINT (e.g. COUNT(*)) as standard JS numbers instead of strings
+  types.setTypeParser(20, (val) => parseInt(val, 10));
+
+  const connectionString = process.env.DATABASE_URL;
+  const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+
+  pool = new Pool({
+    connectionString,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  });
+
+  console.log('📡 Connected to Supabase PostgreSQL cloud database.');
+} else {
+  const Database = require('better-sqlite3');
+  const dbPath = process.env.DB_PATH || path.join(__dirname, 'taskmanager.db');
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  sqliteDb = new Database(dbPath);
+  sqliteDb.pragma('foreign_keys = ON');
+  sqliteDb.pragma('journal_mode = WAL');
+  console.log(`📁 Connected to local SQLite database at ${dbPath}`);
 }
 
-const db = new Database(dbPath);
+function convertSqlToPostgres(sql) {
+  let paramIndex = 1;
+  let converted = sql;
 
-// Enable foreign keys and WAL mode for better concurrency in production
-db.pragma('foreign_keys = ON');
-db.pragma('journal_mode = WAL');
+  // Convert SQLite INSERT OR IGNORE INTO to standard PostgreSQL
+  const isInsertOrIgnore = /INSERT\s+OR\s+IGNORE\s+INTO/i.test(converted);
+  if (isInsertOrIgnore) {
+    converted = converted.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
+  }
 
-function initDb() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('founder', 'team_lead', 'employee')),
-      title TEXT,
-      department TEXT,
-      team_id INTEGER,
-      avatar TEXT,
-      status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('approved', 'pending', 'rejected')),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+  // Replace ? placeholders with $1, $2, $3...
+  converted = converted.replace(/\?/g, () => `$${paramIndex++}`);
 
-    CREATE TABLE IF NOT EXISTS teams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      lead_id INTEGER,
-      description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (lead_id) REFERENCES users(id) ON DELETE SET NULL
-    );
+  if (isInsertOrIgnore && !/ON\s+CONFLICT/i.test(converted)) {
+    converted += ' ON CONFLICT DO NOTHING';
+  }
 
-    CREATE TABLE IF NOT EXISTS tasks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'review', 'completed')),
-      priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
-      assigned_to INTEGER,
-      assigned_by INTEGER NOT NULL,
-      team_id INTEGER,
-      due_date TEXT,
-      progress_pct INTEGER DEFAULT 0,
-      rejection_status TEXT DEFAULT 'none' CHECK(rejection_status IN ('none', 'requested', 'rejected', 'reassigned')),
-      rejection_reason TEXT,
-      rejected_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
-      FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE RESTRICT,
-      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
-    );
+  return converted;
+}
 
-    CREATE TABLE IF NOT EXISTS task_activities (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      activity_type TEXT NOT NULL,
-      details TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
+function normalizeArgs(args) {
+  if (args.length === 1 && Array.isArray(args[0])) {
+    return args[0];
+  }
+  return args;
+}
 
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      sender_id INTEGER NOT NULL,
-      recipient_id INTEGER,
-      team_id INTEGER,
-      content TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
-    );
+const db = {
+  isPostgres,
+  prepare(sql) {
+    if (isPostgres) {
+      const pgSql = convertSqlToPostgres(sql);
+      const isInsert = /^\s*INSERT\s+INTO/i.test(pgSql);
+      const hasReturning = /RETURNING/i.test(pgSql);
 
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      type TEXT NOT NULL,
-      task_id INTEGER,
-      is_read INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
-    );
+      return {
+        async get(...args) {
+          const params = normalizeArgs(args);
+          const res = await pool.query(pgSql, params);
+          return res.rows[0] !== undefined ? res.rows[0] : undefined;
+        },
+        async all(...args) {
+          const params = normalizeArgs(args);
+          const res = await pool.query(pgSql, params);
+          return res.rows;
+        },
+        async run(...args) {
+          const params = normalizeArgs(args);
+          let execSql = pgSql;
+          if (isInsert && !hasReturning) {
+            execSql += ' RETURNING id';
+          }
+          const res = await pool.query(execSql, params);
+          return {
+            lastInsertRowid: res.rows[0]?.id || null,
+            changes: res.rowCount || 0,
+          };
+        },
+      };
+    } else {
+      const stmt = sqliteDb.prepare(sql);
+      return {
+        async get(...args) {
+          const params = normalizeArgs(args);
+          return stmt.get(...params);
+        },
+        async all(...args) {
+          const params = normalizeArgs(args);
+          return stmt.all(...params);
+        },
+        async run(...args) {
+          const params = normalizeArgs(args);
+          return stmt.run(...params);
+        },
+      };
+    }
+  },
 
-    CREATE TABLE IF NOT EXISTS task_comments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      deliverable_url TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
+  async exec(sql) {
+    if (isPostgres) {
+      await pool.query(sql);
+    } else {
+      sqliteDb.exec(sql);
+    }
+  },
+};
 
-    CREATE TABLE IF NOT EXISTS task_assignees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      role_tag TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(task_id, user_id),
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
+// Database Schema Initialization
+async function initDb() {
+  if (isPostgres) {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          role TEXT NOT NULL CHECK(role IN ('founder', 'team_lead', 'employee')),
+          title TEXT,
+          department TEXT,
+          team_id INTEGER,
+          avatar TEXT,
+          status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('approved', 'pending', 'rejected')),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-    CREATE TABLE IF NOT EXISTS company_invites (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      role TEXT NOT NULL DEFAULT 'employee',
-      department TEXT,
-      title TEXT,
-      created_by INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    );
+        CREATE TABLE IF NOT EXISTS teams (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          description TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-    CREATE TABLE IF NOT EXISTS task_chain_stages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id INTEGER NOT NULL,
-      stage_order INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      assigned_to INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed')),
-      deliverable_url TEXT,
-      deliverable_notes TEXT,
-      completed_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `);
+        CREATE TABLE IF NOT EXISTS tasks (
+          id SERIAL PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'review', 'completed')),
+          priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+          assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          assigned_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+          due_date TEXT,
+          progress_pct INTEGER DEFAULT 0,
+          rejection_status TEXT DEFAULT 'none' CHECK(rejection_status IN ('none', 'requested', 'rejected', 'reassigned')),
+          rejection_reason TEXT,
+          rejected_at TIMESTAMP,
+          deliverable_url TEXT,
+          deliverable_notes TEXT,
+          claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          claimed_at TIMESTAMP,
+          is_chain INTEGER DEFAULT 0,
+          active_stage_index INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-  // Safe migrations for existing database
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN deliverable_url TEXT');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN deliverable_notes TEXT');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN claimed_at DATETIME');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN is_chain INTEGER DEFAULT 0');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE tasks ADD COLUMN active_stage_index INTEGER DEFAULT 0');
-  } catch (e) {}
-  try {
-    // Backfill task_assignees from existing tasks.assigned_to
-    db.exec(`
-      INSERT OR IGNORE INTO task_assignees (task_id, user_id)
-      SELECT id, assigned_to FROM tasks WHERE assigned_to IS NOT NULL
+        CREATE TABLE IF NOT EXISTS task_activities (
+          id SERIAL PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          activity_type TEXT NOT NULL,
+          details TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS messages (
+          id SERIAL PRIMARY KEY,
+          sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          recipient_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+          content TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT NOT NULL,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          is_read INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS task_comments (
+          id SERIAL PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          content TEXT NOT NULL,
+          deliverable_url TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS task_assignees (
+          id SERIAL PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          role_tag TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(task_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS company_invites (
+          id SERIAL PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          role TEXT NOT NULL DEFAULT 'employee',
+          department TEXT,
+          title TEXT,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS task_chain_stages (
+          id SERIAL PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          stage_order INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          assigned_to INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed')),
+          deliverable_url TEXT,
+          deliverable_notes TEXT,
+          completed_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Seed default teams if empty in Postgres
+      const teamCountRes = await pool.query('SELECT COUNT(*) as count FROM teams');
+      if (Number(teamCountRes.rows[0].count) === 0) {
+        await pool.query(`
+          INSERT INTO teams (name, description) VALUES
+          ('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure'),
+          ('Product & Design', 'UI/UX design, product strategy, user experience and wireframing'),
+          ('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy'),
+          ('Operations & Management', 'Business operations, project delivery, and administration')
+        `);
+        console.log('✅ Supabase PostgreSQL: Discipl core departments initialized.');
+      }
+    } catch (err) {
+      console.error('❌ Failed to initialize Supabase PostgreSQL database schema:', err);
+    }
+  } else {
+    // SQLite schema
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('founder', 'team_lead', 'employee')),
+        title TEXT,
+        department TEXT,
+        team_id INTEGER,
+        avatar TEXT,
+        status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('approved', 'pending', 'rejected')),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        lead_id INTEGER,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lead_id) REFERENCES users(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'review', 'completed')),
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+        assigned_to INTEGER,
+        assigned_by INTEGER NOT NULL,
+        team_id INTEGER,
+        due_date TEXT,
+        progress_pct INTEGER DEFAULT 0,
+        rejection_status TEXT DEFAULT 'none' CHECK(rejection_status IN ('none', 'requested', 'rejected', 'reassigned')),
+        rejection_reason TEXT,
+        rejected_at DATETIME,
+        deliverable_url TEXT,
+        deliverable_notes TEXT,
+        claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        claimed_at DATETIME,
+        is_chain INTEGER DEFAULT 0,
+        active_stage_index INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE RESTRICT,
+        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS task_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        activity_type TEXT NOT NULL,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id INTEGER NOT NULL,
+        recipient_id INTEGER,
+        team_id INTEGER,
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL,
+        task_id INTEGER,
+        is_read INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS task_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        deliverable_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS task_assignees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        role_tag TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(task_id, user_id),
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS company_invites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        role TEXT NOT NULL DEFAULT 'employee',
+        department TEXT,
+        title TEXT,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS task_chain_stages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        stage_order INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_to INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed')),
+        deliverable_url TEXT,
+        deliverable_notes TEXT,
+        completed_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE
+      );
     `);
-  } catch (e) {}
 
-  // Seed default Discipl company teams if empty (no users seeded - fully dynamic!)
-  const teamCount = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
-  if (teamCount === 0) {
-    const insertTeam = db.prepare('INSERT INTO teams (name, description) VALUES (?, ?)');
-    insertTeam.run('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure');
-    insertTeam.run('Product & Design', 'UI/UX design, product strategy, user experience and wireframing');
-    insertTeam.run('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy');
-    insertTeam.run('Operations & Management', 'Business operations, project delivery, and administration');
-    console.log('✅ Discipl core departments initialized.');
+    // Migrations for existing SQLite database
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN deliverable_url TEXT'); } catch (e) {}
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN deliverable_notes TEXT'); } catch (e) {}
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch (e) {}
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN claimed_at DATETIME'); } catch (e) {}
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN is_chain INTEGER DEFAULT 0'); } catch (e) {}
+    try { sqliteDb.exec('ALTER TABLE tasks ADD COLUMN active_stage_index INTEGER DEFAULT 0'); } catch (e) {}
+    try {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO task_assignees (task_id, user_id)
+        SELECT id, assigned_to FROM tasks WHERE assigned_to IS NOT NULL
+      `);
+    } catch (e) {}
+
+    // Seed default teams if empty in SQLite
+    const teamCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM teams').get().count;
+    if (teamCount === 0) {
+      const insertTeam = sqliteDb.prepare('INSERT INTO teams (name, description) VALUES (?, ?)');
+      insertTeam.run('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure');
+      insertTeam.run('Product & Design', 'UI/UX design, product strategy, user experience and wireframing');
+      insertTeam.run('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy');
+      insertTeam.run('Operations & Management', 'Business operations, project delivery, and administration');
+      console.log('✅ SQLite: Discipl core departments initialized.');
+    }
   }
 }
 
+// Start database initialization
 initDb();
 
-module.exports = { db };
+module.exports = { db, initDb };
