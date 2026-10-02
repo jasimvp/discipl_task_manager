@@ -80,6 +80,12 @@ router.post('/register', async (req, res) => {
 
     // Consume any company invite if one was pre-created for this email
     try {
+      const invite = await db.prepare('SELECT * FROM company_invites WHERE email = ?').get(cleanEmail);
+      if (invite) {
+        if (invite.department) targetDept = invite.department;
+        if (invite.title) targetTitle = invite.title;
+        if (invite.role) targetRole = invite.role;
+      }
       await db.prepare('DELETE FROM company_invites WHERE email = ?').run(cleanEmail);
     } catch (e) {}
 
@@ -357,13 +363,16 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
     const cleanEmail = email.toLowerCase().trim();
     const isLead = req.user.role === 'team_lead';
 
-    // Team Leads can only add employees to their own team
-    const targetRole = isLead ? 'employee' : (role || 'employee');
-    const targetDept = isLead ? (req.user.department || 'Engineering & Tech') : (department || 'Engineering & Tech');
-    let finalTeamId = isLead ? req.user.team_id : (team_id ? Number(team_id) : null);
+    // Both Founders and Team Leads can add members to ANY department!
+    const targetRole = isLead ? (role === 'founder' ? 'employee' : (role || 'employee')) : (role || 'employee');
+    const targetDept = department || (isLead ? (req.user.department || 'Engineering & Tech') : 'Engineering & Tech');
+    let finalTeamId = team_id ? Number(team_id) : null;
     if (!finalTeamId && targetDept) {
       const t = await db.prepare('SELECT id FROM teams WHERE name = ?').get(targetDept);
       if (t) finalTeamId = t.id;
+    }
+    if (!finalTeamId && isLead && !department) {
+      finalTeamId = req.user.team_id;
     }
     const targetTitle = title || (targetRole === 'founder' ? 'Co-Founder' : targetRole === 'team_lead' ? 'Team Lead' : 'Software Engineer');
 
@@ -372,12 +381,12 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
 
     if (existingUser) {
       if (existingUser.status === 'approved') {
-        // If user has no team, Team Lead can claim them into their team!
-        if (isLead && !existingUser.team_id) {
+        // If user has no team, link them into the target department/team
+        if (!existingUser.team_id) {
           await db.prepare('UPDATE users SET team_id = ?, department = ? WHERE id = ?').run(finalTeamId, targetDept, existingUser.id);
           const updated = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(existingUser.id);
           if (req.io) req.io.emit('user_added', updated);
-          return res.json({ message: `${existingUser.name} has been added to your team!`, user: updated, linkedExisting: true });
+          return res.json({ message: `${existingUser.name} has been added to ${targetDept}!`, user: updated, linkedExisting: true });
         }
         return res.status(400).json({ error: `User with email "${cleanEmail}" is already an active member of Discipl.` });
       }
@@ -408,7 +417,7 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
       }
 
       return res.json({
-        message: `Employee ${existingUser.name} (${cleanEmail}) has been linked and approved for the team!`,
+        message: `Employee ${existingUser.name} (${cleanEmail}) has been linked and approved for ${targetDept}!`,
         user: updatedUser,
         linkedExisting: true
       });
@@ -430,7 +439,7 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
         req.io.emit('user_added', newUser);
       }
       return res.status(201).json({
-        message: `Team member ${newUser.name} (${cleanEmail}) has been created and added to the team!`,
+        message: `Member ${newUser.name} (${cleanEmail}) has been created and added to ${targetDept}!`,
         user: newUser,
         linkedExisting: false
       });
@@ -452,7 +461,7 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
     }
 
     res.status(201).json({
-      message: `Email "${cleanEmail}" is now pre-authorized for your team! As soon as the employee registers, they will be automatically placed in your team.`,
+      message: `Email "${cleanEmail}" is now pre-authorized for ${targetDept}! As soon as the employee registers, they will be automatically placed in ${targetDept}.`,
       invite: {
         email: cleanEmail,
         role: targetRole,
@@ -489,7 +498,7 @@ router.post('/teams/add-existing-member', authMiddleware, requireRoles('founder'
     const { user_id, team_id } = req.body;
     const caller = req.user;
 
-    const targetTeamId = caller.role === 'team_lead' ? caller.team_id : (team_id ? Number(team_id) : caller.team_id);
+    const targetTeamId = team_id ? Number(team_id) : caller.team_id;
     if (!targetTeamId) {
       return res.status(400).json({ error: 'Please specify a valid team' });
     }

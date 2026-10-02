@@ -39,17 +39,20 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Pending users, preapproved invites, unassigned
+  // Pending users, preapproved invites, unassigned, teams
   const [pendingUsers, setPendingUsers] = useState([]);
   const [preapprovedInvites, setPreapprovedInvites] = useState([]);
   const [unassignedEmployees, setUnassignedEmployees] = useState([]);
+  const [teamsList, setTeamsList] = useState([]);
+  const [selectedTeamMap, setSelectedTeamMap] = useState({});
   const [loadingLists, setLoadingLists] = useState(false);
 
   const loadData = async () => {
     try {
       setLoadingLists(true);
       const promises = [
-        api.getUnassignedEmployees().catch(() => [])
+        api.getUnassignedEmployees().catch(() => []),
+        api.getTeams().catch(() => [])
       ];
       if (isFounder) {
         promises.push(api.getPendingUsers().catch(() => []));
@@ -57,9 +60,10 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
       }
       const results = await Promise.all(promises);
       setUnassignedEmployees(results[0] || []);
+      setTeamsList(results[1] || []);
       if (isFounder) {
-        setPendingUsers(results[1] || []);
-        setPreapprovedInvites(results[2] || []);
+        setPendingUsers(results[2] || []);
+        setPreapprovedInvites(results[3] || []);
       }
     } catch (e) {
       console.error(e);
@@ -102,13 +106,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
         ? 'Team Lead' 
         : 'Software Engineer';
 
+      const matchingTeam = teamsList.find((t) => t.name === department);
+
       const res = await api.addEmployee({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password: password.trim(),
         role: isLead ? 'employee' : role,
-        department: isLead ? (user?.department || 'Engineering & Tech') : department,
-        team_id: isLead ? user?.team_id : undefined,
+        department: department,
+        team_id: matchingTeam ? matchingTeam.id : undefined,
         title: title.trim() || defaultTitle,
       });
 
@@ -130,10 +136,14 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
     try {
       setLoading(true);
       setError('');
-      const targetTeamId = isLead ? user?.team_id : undefined;
+      const chosenTeamId = selectedTeamMap[targetEmp.id];
+      const targetTeam = teamsList.find((t) => t.id === Number(chosenTeamId)) 
+        || teamsList.find((t) => t.name === targetEmp.department) 
+        || (user?.team_id ? teamsList.find((t) => t.id === user.team_id) : teamsList[0]);
+
       const res = await api.addExistingMemberToTeam({
         user_id: targetEmp.id,
-        team_id: targetTeamId,
+        team_id: targetTeam?.id || chosenTeamId || user?.team_id,
       });
       setSuccessMessage(res.message);
       loadData();
@@ -293,9 +303,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
               <div className="p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 text-purple-900 dark:text-purple-300 text-xs flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
                 <span className="leading-relaxed">
-                  {isLead
-                    ? 'Enter the member\'s details. If you provide a password, their account is instantly activated so they can log in right away!'
-                    : 'Enter the employee\'s work email. If they already registered, they will be instantly linked. Or provide a password to create their account immediately!'}
+                  Enter the employee's details and select their department. If you provide an initial password, their account is instantly activated so they can log in right away!
                 </span>
               </div>
 
@@ -376,24 +384,26 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Department
+                    Department *
                   </label>
-                  {isLead ? (
-                    <div className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold truncate">
-                      {user?.department || 'My Department'}
-                    </div>
-                  ) : (
-                    <select
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
-                    >
-                      <option value="Engineering & Tech">Engineering & Tech</option>
-                      <option value="Product & Design">Product & Design</option>
-                      <option value="Marketing & Growth">Marketing & Growth</option>
-                      <option value="Operations & Management">Operations</option>
-                    </select>
-                  )}
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                  >
+                    {teamsList.length > 0 ? (
+                      teamsList.map((t) => (
+                        <option key={t.id} value={t.name}>{t.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Engineering & Tech">Engineering & Tech</option>
+                        <option value="Product & Design">Product & Design</option>
+                        <option value="Marketing & Growth">Marketing & Growth</option>
+                        <option value="Operations & Management">Operations & Management</option>
+                      </>
+                    )}
+                  </select>
                 </div>
               </div>
 
@@ -426,7 +436,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                       : password.trim()
                       ? 'Create & Activate Account Instantly'
                       : isLead
-                      ? 'Add Member to Team'
+                      ? 'Add Member to Department'
                       : 'Authorize & Link Email to Discipl'}
                   </span>
                 </button>
@@ -457,7 +467,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {unassignedEmployees.map((emp) => (
-                    <div key={emp.id} className="py-3 flex items-center justify-between gap-3">
+                    <div key={emp.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <UserAvatar name={emp.name} avatar={emp.avatar} role={emp.role} size="md" />
                         <div>
@@ -468,14 +478,28 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleClaimUnassigned(emp)}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Add to My Team</span>
-                      </button>
+
+                      <div className="flex items-center gap-2">
+                        {teamsList.length > 0 && (
+                          <select
+                            value={selectedTeamMap[emp.id] || teamsList.find(t => t.name === emp.department)?.id || user?.team_id || teamsList[0]?.id}
+                            onChange={(e) => setSelectedTeamMap(prev => ({ ...prev, [emp.id]: Number(e.target.value) }))}
+                            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:border-purple-500 outline-hidden"
+                          >
+                            {teamsList.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          onClick={() => handleClaimUnassigned(emp)}
+                          disabled={loading}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Assign</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
