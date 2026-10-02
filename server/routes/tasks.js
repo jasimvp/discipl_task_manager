@@ -6,12 +6,14 @@ const { authMiddleware } = require('../auth');
 // Helper to get all assignees for a task
 async function getTaskAssignees(taskId) {
   try {
+    const numId = parseInt(taskId, 10);
+    if (isNaN(numId)) return [];
     return await db.prepare(`
       SELECT u.id, u.name, u.email, u.role, u.title, u.avatar
       FROM task_assignees ta
-      JOIN users u ON ta.user_id = u.id
+      LEFT JOIN users u ON ta.user_id = u.id
       WHERE ta.task_id = ?
-    `).all(taskId);
+    `).all(numId);
   } catch (e) {
     return [];
   }
@@ -20,14 +22,16 @@ async function getTaskAssignees(taskId) {
 // Helper to get sequential workflow stages for a task
 async function getTaskStages(taskId) {
   try {
+    const numId = parseInt(taskId, 10);
+    if (isNaN(numId)) return [];
     return await db.prepare(`
       SELECT s.*,
              u.name as assignee_name, u.avatar as assignee_avatar, u.role as assignee_role, u.title as assignee_title, u.email as assignee_email
       FROM task_chain_stages s
-      JOIN users u ON s.assigned_to = u.id
+      LEFT JOIN users u ON s.assigned_to = u.id
       WHERE s.task_id = ?
       ORDER BY s.stage_order ASC
-    `).all(taskId);
+    `).all(numId);
   } catch (e) {
     return [];
   }
@@ -36,13 +40,14 @@ async function getTaskStages(taskId) {
 // Helper to enrich task with assignees, chain stages, and claim lock details
 async function enrichTask(task) {
   if (!task) return null;
-  const assignees = await getTaskAssignees(task.id);
-  const stages = task.is_chain ? await getTaskStages(task.id) : [];
+  const taskId = parseInt(task.id, 10);
+  const assignees = await getTaskAssignees(taskId);
+  const stages = task.is_chain ? await getTaskStages(taskId) : [];
 
   // If chain, ensure all stage assignees are included in the assignees array
   if (stages.length > 0) {
     for (const stage of stages) {
-      if (!assignees.some((a) => a.id === stage.assigned_to)) {
+      if (stage.assigned_to && !assignees.some((a) => Number(a.id) === Number(stage.assigned_to))) {
         assignees.push({
           id: stage.assigned_to,
           name: stage.assignee_name,
@@ -56,15 +61,15 @@ async function enrichTask(task) {
   }
 
   // Ensure primary assignee is in the list
-  if (task.assigned_to && !assignees.some((a) => a.id === task.assigned_to)) {
-    const primary = await db.prepare('SELECT id, name, email, role, title, avatar FROM users WHERE id = ?').get(task.assigned_to);
+  if (task.assigned_to && !assignees.some((a) => Number(a.id) === Number(task.assigned_to))) {
+    const primary = await db.prepare('SELECT id, name, email, role, title, avatar FROM users WHERE id = ?').get(parseInt(task.assigned_to, 10));
     if (primary) assignees.unshift(primary);
   }
 
   let claimed_by_name = null;
   let claimed_by_avatar = null;
   if (task.claimed_by) {
-    const claimer = await db.prepare('SELECT name, avatar FROM users WHERE id = ?').get(task.claimed_by);
+    const claimer = await db.prepare('SELECT name, avatar FROM users WHERE id = ?').get(parseInt(task.claimed_by, 10));
     if (claimer) {
       claimed_by_name = claimer.name;
       claimed_by_avatar = claimer.avatar;
@@ -85,6 +90,9 @@ async function enrichTask(task) {
 
 // Helper to get full task with all details
 async function getFullTask(taskId) {
+  const numId = parseInt(taskId, 10);
+  if (isNaN(numId)) return null;
+
   const task = await db.prepare(`
     SELECT t.*,
            assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role, assignee.title as assignee_title, assignee.email as assignee_email,
@@ -95,7 +103,7 @@ async function getFullTask(taskId) {
     LEFT JOIN users creator ON t.assigned_by = creator.id
     LEFT JOIN teams tm ON t.team_id = tm.id
     WHERE t.id = ?
-  `).get(taskId);
+  `).get(numId);
 
   return await enrichTask(task);
 }
@@ -211,7 +219,12 @@ router.get('/', authMiddleware, async (req, res) => {
 // GET single task by ID
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const task = await getFullTask(req.params.id);
+    const taskId = parseInt(req.params.id, 10);
+    if (isNaN(taskId)) {
+      return res.status(400).json({ error: 'Invalid task ID' });
+    }
+
+    const task = await getFullTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -221,19 +234,19 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const activities = await db.prepare(`
       SELECT a.*, u.name as user_name, u.avatar as user_avatar
       FROM task_activities a
-      JOIN users u ON a.user_id = u.id
+      LEFT JOIN users u ON a.user_id = u.id
       WHERE a.task_id = ?
       ORDER BY a.created_at DESC
-    `).all(req.params.id);
+    `).all(taskId);
 
     // Get discussion comments
     const comments = await db.prepare(`
       SELECT c.*, u.name as user_name, u.avatar as user_avatar, u.role as user_role, u.title as user_title
       FROM task_comments c
-      JOIN users u ON c.user_id = u.id
+      LEFT JOIN users u ON c.user_id = u.id
       WHERE c.task_id = ?
       ORDER BY c.created_at ASC
-    `).all(req.params.id);
+    `).all(taskId);
 
     res.json({ ...task, activities, comments });
   } catch (err) {
@@ -898,7 +911,12 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    if (task.assigned_to !== user.id && user.role !== 'founder') {
+    const taskIdNum = parseInt(taskId, 10);
+    const isPrimaryAssignee = Number(task.assigned_to) === Number(user.id);
+    const isMultiAssignee = (await db.prepare('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?').get(taskIdNum, user.id)) !== undefined;
+    const isStageAssignee = (await db.prepare('SELECT 1 FROM task_chain_stages WHERE task_id = ? AND assigned_to = ?').get(taskIdNum, user.id)) !== undefined;
+
+    if (!isPrimaryAssignee && !isMultiAssignee && !isStageAssignee && user.role !== 'founder' && user.role !== 'team_lead') {
       return res.status(403).json({ error: 'Only the assigned employee can request reassignment' });
     }
 
@@ -909,10 +927,10 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
           rejected_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(reason.trim(), taskId);
+    `).run(reason.trim(), taskIdNum);
 
     await recordActivity(
-      taskId,
+      taskIdNum,
       user.id,
       'rejection_requested',
       `Rejection request submitted by ${user.name}. Reason: "${reason.trim()}"`
@@ -923,7 +941,7 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
       'Reassignment Request',
       `${user.name} requested reassignment for "${task.title}": "${reason.trim()}"`,
       'task_rejected',
-      taskId
+      taskIdNum
     );
 
     const founders = await db.prepare("SELECT id FROM users WHERE role = 'founder' AND id != ?").all(user.id);
@@ -934,20 +952,12 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
           'Reassignment Request',
           `${user.name} requested reassignment for "${task.title}": "${reason.trim()}"`,
           'task_rejected',
-          taskId
+          taskIdNum
         );
       }
     }
 
-    const updatedTask = await db.prepare(`
-      SELECT t.*,
-             assignee.name as assignee_name, assignee.avatar as assignee_avatar,
-             creator.name as creator_name
-      FROM tasks t
-      LEFT JOIN users assignee ON t.assigned_to = assignee.id
-      LEFT JOIN users creator ON t.assigned_by = creator.id
-      WHERE t.id = ?
-    `).get(taskId);
+    const updatedTask = await getFullTask(taskIdNum);
 
     // Real-time broadcast
     if (req.io) {
@@ -964,7 +974,7 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
 // FOUNDER OR TEAM LEADER REASSIGNS TASK
 router.post('/:id/reassign', authMiddleware, async (req, res) => {
   try {
-    const taskId = req.params.id;
+    const taskId = parseInt(req.params.id, 10);
     const user = req.user;
     const { new_assignee_id, notes, dismiss_rejection } = req.body;
 
@@ -1002,7 +1012,7 @@ router.post('/:id/reassign', authMiddleware, async (req, res) => {
         );
       }
 
-      const updatedTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+      const updatedTask = await getFullTask(taskId);
       if (req.io) req.io.emit('task_reassigned', updatedTask);
       return res.json({ message: 'Reassignment request dismissed', task: updatedTask });
     }
@@ -1011,7 +1021,7 @@ router.post('/:id/reassign', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Please select a new employee to reassign this task to' });
     }
 
-    const newAssignee = await db.prepare('SELECT * FROM users WHERE id = ?').get(new_assignee_id);
+    const newAssignee = await db.prepare('SELECT * FROM users WHERE id = ?').get(parseInt(new_assignee_id, 10));
     if (!newAssignee) {
       return res.status(404).json({ error: 'New assignee user not found' });
     }
@@ -1025,10 +1035,20 @@ router.post('/:id/reassign', authMiddleware, async (req, res) => {
           team_id = COALESCE(?, team_id),
           rejection_status = 'reassigned',
           status = 'todo',
+          claimed_by = NULL,
+          claimed_at = NULL,
           progress_pct = 0,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(newAssignee.id, newAssignee.team_id, taskId);
+
+    // Keep task_assignees synchronized
+    try {
+      await db.prepare('DELETE FROM task_assignees WHERE task_id = ?').run(taskId);
+      await db.prepare('INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)').run(taskId, newAssignee.id);
+    } catch (e) {
+      console.warn('Failed to sync task_assignees on reassign:', e.message);
+    }
 
     await recordActivity(
       taskId,
@@ -1055,15 +1075,7 @@ router.post('/:id/reassign', authMiddleware, async (req, res) => {
       );
     }
 
-    const updatedTask = await db.prepare(`
-      SELECT t.*,
-             assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role,
-             creator.name as creator_name
-      FROM tasks t
-      LEFT JOIN users assignee ON t.assigned_to = assignee.id
-      LEFT JOIN users creator ON t.assigned_by = creator.id
-      WHERE t.id = ?
-    `).get(taskId);
+    const updatedTask = await getFullTask(taskId);
 
     // Real-time broadcast
     if (req.io) {

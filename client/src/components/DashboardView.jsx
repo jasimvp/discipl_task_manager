@@ -282,8 +282,8 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                   const todayStr = new Date().toISOString().split('T')[0];
                   const isOverdue = t.due_date && t.due_date < todayStr && t.status !== 'completed';
                   const isDueToday = t.due_date && t.due_date === todayStr && t.status !== 'completed';
-                  const isClaimedByMe = t.claimed_by === user?.id;
-                  const isClaimedByOther = t.claimed_by && t.claimed_by !== user?.id && t.status === 'in_progress';
+                  const isClaimedByMe = Number(t.claimed_by) === Number(user?.id);
+                  const isClaimedByOther = t.claimed_by && Number(t.claimed_by) !== Number(user?.id) && t.status === 'in_progress';
                   const assignees = t.assignees || (t.assignee_name ? [{ id: t.assigned_to, name: t.assignee_name, avatar: t.assignee_avatar, role: t.assignee_role }] : []);
 
                   return (
@@ -321,6 +321,12 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                                 Due Today
                               </span>
                             )}
+                            {isRejected && (
+                              <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300 animate-pulse">
+                                <AlertCircle className="w-3 h-3 text-amber-600" />
+                                റീ-അസൈൻമെന്റ് പെൻഡിംഗ്
+                              </span>
+                            )}
                             {t.deliverable_url && (
                               <span className="bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200 dark:border-indigo-800">
                                 <Link2 className="w-3 h-3 text-indigo-500" />
@@ -352,8 +358,8 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                           </h3>
                         </div>
 
-                        {/* Status selector */}
-                        <div className="flex items-center gap-2">
+                        {/* Status selector & Actions */}
+                        <div className="flex items-center gap-2 flex-wrap">
                           <select
                             disabled={isClaimedByOther}
                             value={t.status}
@@ -374,9 +380,9 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
 
                           <button
                             onClick={() => onSelectTask(t.id)}
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors"
                           >
-                            Open Details
+                            വിശദാംശങ്ങൾ (Details)
                           </button>
                         </div>
                       </div>

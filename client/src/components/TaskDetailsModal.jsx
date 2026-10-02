@@ -139,6 +139,50 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
 
   if (!isOpen) return null;
 
+  if (loading && !task) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 animate-in fade-in duration-200">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            ടാസ്ക് വിവരങ്ങൾ ലഭ്യമാക്കുന്നു...
+          </p>
+          <p className="text-xs text-slate-400">Loading task #{taskId} details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !task) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 animate-in fade-in duration-200">
+          <div className="w-12 h-12 bg-rose-100 dark:bg-rose-950 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">ടാസ്ക് വിവരങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല</h3>
+            <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">{error}</p>
+          </div>
+          <div className="flex justify-center gap-2 pt-2">
+            <button
+              onClick={fetchTaskDetails}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold"
+            >
+              വീണ്ടും ശ്രമിക്കുക (Retry)
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold"
+            >
+              അടയ്ക്കുക (Close)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isFounder = user?.role === 'founder';
   const isLead = user?.role === 'team_lead';
   
@@ -147,7 +191,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
     ? task.assignees 
     : (task?.assignee_name ? [{ id: task.assigned_to, name: task.assignee_name, avatar: task.assignee_avatar, role: task.assignee_role, title: task.assignee_title }] : []);
   
-  const isAssignee = assigneesList.some((a) => a.id === user?.id) || task?.assigned_to === user?.id;
+  const isAssignee = assigneesList.some((a) => Number(a.id) === Number(user?.id)) || Number(task?.assigned_to) === Number(user?.id);
   const canReassign = isFounder || isLead;
 
   // Sequential Chain variables
@@ -155,13 +199,13 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
   const stages = task?.stages || [];
   const activeStage = stages.find((s) => s.status === 'active');
   const nextStage = activeStage ? stages.find((s) => s.stage_order > activeStage.stage_order) : null;
-  const isActiveStageAssignee = activeStage?.assigned_to === user?.id;
+  const isActiveStageAssignee = Number(activeStage?.assigned_to) === Number(user?.id);
   const canCompleteActiveStage = isActiveStageAssignee || isFounder || isLead;
-  const myPendingStage = stages.find((s) => s.assigned_to === user?.id && s.status === 'pending');
+  const myPendingStage = stages.find((s) => Number(s.assigned_to) === Number(user?.id) && s.status === 'pending');
 
   // Concurrency Claim Lock checks
-  const isClaimedByMe = task?.claimed_by === user?.id;
-  const isClaimedByOther = Boolean(task?.claimed_by && task.claimed_by !== user?.id && task?.status === 'in_progress');
+  const isClaimedByMe = Number(task?.claimed_by) === Number(user?.id);
+  const isClaimedByOther = Boolean(task?.claimed_by && Number(task.claimed_by) !== Number(user?.id) && task?.status === 'in_progress');
   const isCompleted = task?.status === 'completed';
 
   // Handle claiming task (Starting work)
@@ -423,6 +467,30 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
               {task?.description || 'No detailed description provided.'}
             </p>
           </div>
+
+          {/* Quick Reassignment Callout for Employee */}
+          {isAssignee && task?.rejection_status !== 'requested' && !showRejectForm && (
+            <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-950 dark:text-amber-200">
+                    തെറ്റായ ടാസ്ക് ആണോ? (Wrongly Assigned Deliverable?)
+                  </h4>
+                  <p className="text-[11px] text-amber-800 dark:text-amber-400 mt-0.5">
+                    ഈ വർക്ക് നിങ്ങളുടേതല്ലെങ്കിൽ കാരണം രേഖപ്പെടുത്തി റീ-അസൈൻ ചെയ്യാൻ ടീം ലീഡിനോട് ഇവിടെ അഭ്യർത്ഥിക്കാം.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRejectForm(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 transition-colors shadow-xs"
+              >
+                റീ-അസൈൻമെന്റ് അഭ്യർത്ഥിക്കുക
+              </button>
+            </div>
+          )}
 
           {/* ========================================================================= */}
           {/* CASE A: SEQUENTIAL CHAIN WORKFLOW PIPELINE & STAGE HANDOFF               */}
@@ -887,7 +955,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
               </span>
               <div className="flex flex-wrap gap-2">
                 {assigneesList.map((a) => {
-                  const isWorker = task?.claimed_by === a.id;
+                  const isWorker = Number(task?.claimed_by) === Number(a.id);
                   return (
                     <div
                       key={a.id}
