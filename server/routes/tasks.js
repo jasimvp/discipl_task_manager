@@ -93,19 +93,35 @@ async function getFullTask(taskId) {
   const numId = parseInt(taskId, 10);
   if (isNaN(numId)) return null;
 
-  const task = await db.prepare(`
-    SELECT t.*,
-           assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role, assignee.title as assignee_title, assignee.email as assignee_email,
-           creator.name as creator_name, creator.avatar as creator_avatar,
-           tm.name as team_name
-    FROM tasks t
-    LEFT JOIN users assignee ON t.assigned_to = assignee.id
-    LEFT JOIN users creator ON t.assigned_by = creator.id
-    LEFT JOIN teams tm ON t.team_id = tm.id
-    WHERE t.id = ?
-  `).get(numId);
+  try {
+    const task = await db.prepare(`
+      SELECT t.*,
+             assignee.name as assignee_name, assignee.avatar as assignee_avatar, assignee.role as assignee_role, assignee.title as assignee_title, assignee.email as assignee_email,
+             creator.name as creator_name, creator.avatar as creator_avatar,
+             tm.name as team_name
+      FROM tasks t
+      LEFT JOIN users assignee ON t.assigned_to = assignee.id
+      LEFT JOIN users creator ON t.assigned_by = creator.id
+      LEFT JOIN teams tm ON t.team_id = tm.id
+      WHERE t.id = ?
+    `).get(numId);
 
-  return await enrichTask(task);
+    if (task) {
+      return await enrichTask(task);
+    }
+  } catch (e) {
+    console.error('Error in getFullTask JOIN query:', e.message);
+  }
+
+  // Fallback: fetch directly from tasks table without complex joins
+  try {
+    const fallbackTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(numId);
+    if (!fallbackTask) return null;
+    return await enrichTask(fallbackTask);
+  } catch (err) {
+    console.error('Error in getFullTask fallback:', err.message);
+    return null;
+  }
 }
 
 // Helper to record activity
@@ -230,28 +246,38 @@ router.get('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Get activities
-    const activities = await db.prepare(`
-      SELECT a.*, u.name as user_name, u.avatar as user_avatar
-      FROM task_activities a
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.task_id = ?
-      ORDER BY a.created_at DESC
-    `).all(taskId);
+    // Get activities safely
+    let activities = [];
+    try {
+      activities = await db.prepare(`
+        SELECT a.*, u.name as user_name, u.avatar as user_avatar
+        FROM task_activities a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE a.task_id = ?
+        ORDER BY a.created_at DESC
+      `).all(taskId);
+    } catch (actErr) {
+      console.warn('Activities fetch warning for task', taskId, actErr.message);
+    }
 
-    // Get discussion comments
-    const comments = await db.prepare(`
-      SELECT c.*, u.name as user_name, u.avatar as user_avatar, u.role as user_role, u.title as user_title
-      FROM task_comments c
-      LEFT JOIN users u ON c.user_id = u.id
-      WHERE c.task_id = ?
-      ORDER BY c.created_at ASC
-    `).all(taskId);
+    // Get discussion comments safely
+    let comments = [];
+    try {
+      comments = await db.prepare(`
+        SELECT c.*, u.name as user_name, u.avatar as user_avatar, u.role as user_role, u.title as user_title
+        FROM task_comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.task_id = ?
+        ORDER BY c.created_at ASC
+      `).all(taskId);
+    } catch (commErr) {
+      console.warn('Comments fetch warning for task', taskId, commErr.message);
+    }
 
-    res.json({ ...task, activities, comments });
+    res.json({ ...task, activities: activities || [], comments: comments || [] });
   } catch (err) {
     console.error('Error fetching task details:', err);
-    res.status(500).json({ error: 'Failed to fetch task details' });
+    res.status(500).json({ error: 'Failed to fetch task details: ' + (err.message || 'Unknown error') });
   }
 });
 

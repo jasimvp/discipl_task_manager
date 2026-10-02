@@ -144,10 +144,10 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 animate-in fade-in duration-200">
           <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-            ടാസ്ക് വിവരങ്ങൾ ലഭ്യമാക്കുന്നു...
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Loading Task Details...
           </p>
-          <p className="text-xs text-slate-400">Loading task #{taskId} details...</p>
+          <p className="text-xs text-slate-400">Task #{taskId}</p>
         </div>
       </div>
     );
@@ -161,7 +161,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
             <AlertCircle className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">ടാസ്ക് വിവരങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">Unable to Load Task Details</h3>
             <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">{error}</p>
           </div>
           <div className="flex justify-center gap-2 pt-2">
@@ -169,13 +169,13 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
               onClick={fetchTaskDetails}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold"
             >
-              വീണ്ടും ശ്രമിക്കുക (Retry)
+              Retry
             </button>
             <button
               onClick={onClose}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold"
             >
-              അടയ്ക്കുക (Close)
+              Close
             </button>
           </div>
         </div>
@@ -475,10 +475,10 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <div>
                   <h4 className="text-xs font-bold text-amber-950 dark:text-amber-200">
-                    തെറ്റായ ടാസ്ക് ആണോ? (Wrongly Assigned Deliverable?)
+                    Wrongly Assigned Task?
                   </h4>
                   <p className="text-[11px] text-amber-800 dark:text-amber-400 mt-0.5">
-                    ഈ വർക്ക് നിങ്ങളുടേതല്ലെങ്കിൽ കാരണം രേഖപ്പെടുത്തി റീ-അസൈൻ ചെയ്യാൻ ടീം ലീഡിനോട് ഇവിടെ അഭ്യർത്ഥിക്കാം.
+                    If this deliverable was assigned to you by mistake, you can request reassignment to another team member.
                   </p>
                 </div>
               </div>
@@ -487,7 +487,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 onClick={() => setShowRejectForm(true)}
                 className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 transition-colors shadow-xs"
               >
-                റീ-അസൈൻമെന്റ് അഭ്യർത്ഥിക്കുക
+                Request Reassignment
               </button>
             </div>
           )}
@@ -702,7 +702,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                 <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3">
                   <Lock className="w-4 h-4 text-slate-500 shrink-0" />
                   <p className="text-xs text-slate-700 dark:text-slate-300">
-                    നിങ്ങൾ <strong>Step {myPendingStage.stage_order} ("{myPendingStage.title}")</strong> ലേക്ക് ഷെഡ്യൂൾ ചെയ്യപ്പെട്ടിരിക്കുന്നു. ഇതിന് മുൻപുള്ള സ്റ്റേജ് പൂർത്തിയാകുമ്പോൾ നിങ്ങൾക്ക് ഇൻസ്റ്റന്റ് നോട്ടിഫിക്കേഷൻ ലഭിക്കുന്നതാണ്.
+                    You are scheduled for <strong>Step {myPendingStage.stage_order} ("{myPendingStage.title}")</strong>. You will receive an instant notification as soon as the previous stage is completed.
                   </p>
                 </div>
               )}
@@ -745,7 +745,7 @@ export default function TaskDetailsModal({ taskId, isOpen, onClose, onTaskUpdate
                         </span>
                       </div>
                       <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
-                        ഓവർലാപ്പ് ഒഴിവാക്കാനായി ഈ ടാസ്ക് നിലവിൽ <strong>{task.claimed_by_name}</strong> വർക്ക് ചെയ്യുകയാണ്. {task.claimed_by_name} ഇത് കംപ്ലീറ്റ് ചെയ്യുമ്പോൾ നിങ്ങളുടെ ഡാഷ്‌ബോർഡിലും ഓട്ടോമാറ്റിക് ആയി കംപ്ലീറ്റ് ആയി സിങ്ക് ആകുന്നതാണ്.
+                        To avoid duplicate work, this deliverable is currently locked and actively being worked on by <strong>{task.claimed_by_name}</strong>. Once completed, your dashboard will automatically sync to completed.
                       </p>
                     </div>
                   </div>

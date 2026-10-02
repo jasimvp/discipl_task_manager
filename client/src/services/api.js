@@ -167,7 +167,14 @@ export const api = {
     const res = await fetch(`${API_BASE}/tasks/${id}`, {
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to fetch task');
+    if (!res.ok) {
+      let errMsg = 'Failed to fetch task';
+      try {
+        const data = await res.json();
+        if (data && data.error) errMsg = data.error;
+      } catch (e) {}
+      throw new Error(errMsg);
+    }
     return res.json();
   },
 

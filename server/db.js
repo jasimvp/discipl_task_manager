@@ -274,21 +274,51 @@ async function initDb() {
       ];
 
       for (const tableSql of tables) {
-        await pool.query(tableSql);
+        try {
+          await pool.query(tableSql);
+        } catch (tableErr) {
+          console.warn('Postgres table init warning:', tableErr.message);
+        }
+      }
+
+      // Migrations for existing PostgreSQL database tables
+      const pgAlterStatements = [
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deliverable_url TEXT',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deliverable_notes TEXT',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS claimed_by INTEGER REFERENCES users(id) ON DELETE SET NULL',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_chain INTEGER DEFAULT 0',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS active_stage_index INTEGER DEFAULT 0',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS rejection_status TEXT DEFAULT \'none\'',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS rejection_reason TEXT',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress_pct INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS title TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id INTEGER',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT \'approved\''
+      ];
+      for (const alterSql of pgAlterStatements) {
+        try {
+          await pool.query(alterSql);
+        } catch (e) {}
       }
 
       // Seed default teams if empty in Postgres
-      const teamCountRes = await pool.query('SELECT COUNT(*) as count FROM teams');
-      if (Number(teamCountRes.rows[0].count) === 0) {
-        await pool.query(`
-          INSERT INTO teams (name, description) VALUES
-          ('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure'),
-          ('Product & Design', 'UI/UX design, product strategy, user experience and wireframing'),
-          ('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy'),
-          ('Operations & Management', 'Business operations, project delivery, and administration')
-        `);
-        console.log('✅ Supabase PostgreSQL: Discipl core departments initialized.');
-      }
+      try {
+        const teamCountRes = await pool.query('SELECT COUNT(*) as count FROM teams');
+        if (Number(teamCountRes.rows[0].count) === 0) {
+          await pool.query(`
+            INSERT INTO teams (name, description) VALUES
+            ('Engineering & Tech', 'Core software development, backend, frontend, QA and infrastructure'),
+            ('Product & Design', 'UI/UX design, product strategy, user experience and wireframing'),
+            ('Marketing & Growth', 'Brand marketing, outreach, growth and content strategy'),
+            ('Operations & Management', 'Business operations, project delivery, and administration')
+          `);
+          console.log('✅ Supabase PostgreSQL: Discipl core departments initialized.');
+        }
+      } catch (e) {}
 
       // Repair any users with missing or zero team_id
       try {

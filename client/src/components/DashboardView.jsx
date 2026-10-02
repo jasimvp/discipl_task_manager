@@ -324,7 +324,7 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                             {isRejected && (
                               <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300 animate-pulse">
                                 <AlertCircle className="w-3 h-3 text-amber-600" />
-                                റീ-അസൈൻമെന്റ് പെൻഡിംഗ്
+                                Reassignment Pending
                               </span>
                             )}
                             {t.deliverable_url && (
@@ -379,10 +379,11 @@ export default function DashboardView({ onNavigateTab, onOpenCreateTask, onSelec
                           </select>
 
                           <button
+                            type="button"
                             onClick={() => onSelectTask(t.id)}
                             className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors"
                           >
-                            വിശദാംശങ്ങൾ (Details)
+                            View Details
                           </button>
                         </div>
                       </div>
