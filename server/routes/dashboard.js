@@ -40,11 +40,11 @@ router.get('/stats', authMiddleware, async (req, res) => {
     // Overall completion rate
     const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-    // Employee-wise status and workload (scoped to user's team + founders for non-founders)
+    // Employee-wise status and workload (scoped to user's team + leadership for regular employees)
     let empWhere = "WHERE u.status = 'approved'";
     const empParams = [];
-    if (!isFounder) {
-      empWhere += " AND (u.role = 'founder' OR u.team_id = ?)";
+    if (user.role === 'employee') {
+      empWhere += " AND (u.role IN ('founder', 'team_lead') OR u.team_id = ?)";
       empParams.push(user.team_id || 0);
     }
 
@@ -65,10 +65,10 @@ router.get('/stats', authMiddleware, async (req, res) => {
       ORDER BY total_tasks DESC, u.name ASC
     `).all(...empParams);
 
-    // Team summary (scoped to user's team for non-founders)
+    // Team summary (scoped to user's team for regular employees)
     let teamWhere = '';
     const teamParams = [];
-    if (!isFounder) {
+    if (user.role === 'employee') {
       teamWhere = 'WHERE tm.id = ?';
       teamParams.push(user.team_id || 0);
     }

@@ -211,9 +211,10 @@ router.get('/users', authMiddleware, async (req, res) => {
     const params = [];
 
     // Team-based user privacy:
-    // Non-founders only see founders and members of their own team!
-    if (user.role !== 'founder') {
-      query += ` AND (u.role = 'founder' OR u.team_id = ?)`;
+    // Regular employees only see founders, team leads, and members of their own team.
+    // Founders and Team Leads can view all employees across teams.
+    if (user.role === 'employee') {
+      query += ` AND (u.role IN ('founder', 'team_lead') OR u.team_id = ?)`;
       params.push(user.team_id || 0);
     }
 
@@ -560,7 +561,7 @@ router.get('/teams', authMiddleware, async (req, res) => {
     `;
     const params = [];
 
-    if (user.role !== 'founder') {
+    if (user.role === 'employee') {
       query += ` WHERE t.id = ?`;
       params.push(user.team_id || 0);
     }
