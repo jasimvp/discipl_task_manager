@@ -36,12 +36,9 @@ router.get('/direct/:otherUserId', authMiddleware, async (req, res) => {
     const otherUserId = Number(req.params.otherUserId);
     const user = req.user;
 
-    // Regular employees can only direct message leadership or members of their own team
-    if (user.role === 'employee') {
-      const otherUser = await db.prepare('SELECT role, team_id FROM users WHERE id = ?').get(otherUserId);
-      if (!otherUser || (otherUser.role !== 'founder' && otherUser.role !== 'team_lead' && otherUser.team_id !== user.team_id)) {
-        return res.status(403).json({ error: 'You can only message members of your own team or leadership.' });
-      }
+    const otherUser = await db.prepare('SELECT id, name, status FROM users WHERE id = ?').get(otherUserId);
+    if (!otherUser || otherUser.status !== 'approved') {
+      return res.status(404).json({ error: 'User not found or not active.' });
     }
 
     const messages = await db.prepare(`
@@ -79,11 +76,9 @@ router.post('/', authMiddleware, async (req, res) => {
     if (finalRecipientId) {
       finalTeamId = null;
 
-      if (user.role === 'employee') {
-        const otherUser = await db.prepare('SELECT role, team_id FROM users WHERE id = ?').get(finalRecipientId);
-        if (!otherUser || (otherUser.role !== 'founder' && otherUser.role !== 'team_lead' && otherUser.team_id !== user.team_id)) {
-          return res.status(403).json({ error: 'You cannot direct message users outside your team or leadership.' });
-        }
+      const otherUser = await db.prepare('SELECT id, name, status FROM users WHERE id = ?').get(finalRecipientId);
+      if (!otherUser || otherUser.status !== 'approved') {
+        return res.status(404).json({ error: 'Recipient not found or not active.' });
       }
     } else if (finalTeamId) {
       finalRecipientId = null;
@@ -171,12 +166,6 @@ router.get('/conversations', authMiddleware, async (req, res) => {
       WHERE u.id != ? AND u.status = 'approved'
     `;
     const params = [currentUserId, currentUserId, currentUserId, currentUserId, currentUserId];
-
-    // Team-based contact privacy: regular employees only see leadership or teammates in their own team
-    if (user.role === 'employee') {
-      query += ` AND (u.role IN ('founder', 'team_lead') OR u.team_id = ?)`;
-      params.push(user.team_id || 0);
-    }
 
     query += ` ORDER BY last_message_time DESC NULLS LAST, u.name ASC`;
 

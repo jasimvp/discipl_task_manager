@@ -289,6 +289,17 @@ async function initDb() {
         `);
         console.log('✅ Supabase PostgreSQL: Discipl core departments initialized.');
       }
+
+      // Repair any users with missing or zero team_id
+      try {
+        await pool.query(`
+          UPDATE users SET team_id = 1 WHERE (team_id IS NULL OR team_id = 0) AND (department LIKE '%Eng%' OR department IS NULL);
+          UPDATE users SET team_id = 2 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Product%';
+          UPDATE users SET team_id = 3 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Market%';
+          UPDATE users SET team_id = 4 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Operat%';
+          UPDATE users SET team_id = 1 WHERE team_id IS NULL OR team_id = 0;
+        `);
+      } catch (e) {}
     } catch (err) {
       console.error('❌ Failed to initialize Supabase PostgreSQL database schema:', err);
     }
@@ -455,6 +466,17 @@ async function initDb() {
       insertTeam.run('Operations & Management', 'Business operations, project delivery, and administration');
       console.log('✅ SQLite: Discipl core departments initialized.');
     }
+
+    // Repair any users with missing or zero team_id
+    try {
+      sqliteDb.exec(`
+        UPDATE users SET team_id = 1 WHERE (team_id IS NULL OR team_id = 0) AND (department LIKE '%Eng%' OR department IS NULL);
+        UPDATE users SET team_id = 2 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Product%';
+        UPDATE users SET team_id = 3 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Market%';
+        UPDATE users SET team_id = 4 WHERE (team_id IS NULL OR team_id = 0) AND department LIKE '%Operat%';
+        UPDATE users SET team_id = 1 WHERE team_id IS NULL OR team_id = 0;
+      `);
+    } catch (e) {}
   }
 }
 

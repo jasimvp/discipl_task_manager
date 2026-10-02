@@ -40,13 +40,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
     // Overall completion rate
     const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-    // Employee-wise status and workload (scoped to user's team + leadership for regular employees)
-    let empWhere = "WHERE u.status = 'approved'";
-    const empParams = [];
-    if (user.role === 'employee') {
-      empWhere += " AND (u.role IN ('founder', 'team_lead') OR u.team_id = ?)";
-      empParams.push(user.team_id || 0);
-    }
+    // Employee-wise status and workload for all active workspace members
+    const empWhere = "WHERE u.status = 'approved'";
 
     const employeeStats = await db.prepare(`
       SELECT u.id, u.name, u.email, u.avatar, u.role, u.title, u.department,
@@ -63,16 +58,9 @@ router.get('/stats', authMiddleware, async (req, res) => {
       ${empWhere}
       GROUP BY u.id, u.name, u.email, u.avatar, u.role, u.title, u.department, t.name
       ORDER BY total_tasks DESC, u.name ASC
-    `).all(...empParams);
+    `).all();
 
-    // Team summary (scoped to user's team for regular employees)
-    let teamWhere = '';
-    const teamParams = [];
-    if (user.role === 'employee') {
-      teamWhere = 'WHERE tm.id = ?';
-      teamParams.push(user.team_id || 0);
-    }
-
+    // Team summary for all workspace teams
     const teamStats = await db.prepare(`
       SELECT tm.id, tm.name,
              COUNT(tk.id) as total_tasks,
@@ -81,9 +69,9 @@ router.get('/stats', authMiddleware, async (req, res) => {
              SUM(CASE WHEN tk.status = 'todo' THEN 1 ELSE 0 END) as todo_tasks
       FROM teams tm
       LEFT JOIN tasks tk ON tk.team_id = tm.id
-      ${teamWhere}
       GROUP BY tm.id
-    `).all(...teamParams);
+      ORDER BY tm.name ASC
+    `).all();
 
     // Priority breakdown
     const priorityStats = await db.prepare(`

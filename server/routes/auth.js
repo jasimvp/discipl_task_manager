@@ -213,25 +213,15 @@ router.get('/users', authMiddleware, async (req, res) => {
       FROM users u
       LEFT JOIN teams t ON u.team_id = t.id
       WHERE u.status = 'approved'
+      ORDER BY 
+        CASE u.role 
+          WHEN 'founder' THEN 1 
+          WHEN 'team_lead' THEN 2 
+          WHEN 'employee' THEN 3 
+        END, u.name ASC
     `;
-    const params = [];
 
-    // Team-based user privacy:
-    // Regular employees only see founders, team leads, and members of their own team.
-    // Founders and Team Leads can view all employees across teams.
-    if (user.role === 'employee') {
-      query += ` AND (u.role IN ('founder', 'team_lead') OR u.team_id = ?)`;
-      params.push(user.team_id || 0);
-    }
-
-    query += ` ORDER BY 
-      CASE u.role 
-        WHEN 'founder' THEN 1 
-        WHEN 'team_lead' THEN 2 
-        WHEN 'employee' THEN 3 
-      END, u.name ASC`;
-
-    const users = await db.prepare(query).all(...params);
+    const users = await db.prepare(query).all();
     res.json(users);
   } catch (err) {
     console.error('Error fetching users:', err);
@@ -556,15 +546,9 @@ router.get('/teams', authMiddleware, async (req, res) => {
       FROM teams t
       LEFT JOIN users u ON t.lead_id = u.id
     `;
-    const params = [];
-
-    if (user.role === 'employee') {
-      query += ` WHERE t.id = ?`;
-      params.push(user.team_id || 0);
-    }
 
     query += ` ORDER BY t.name ASC`;
-    const teams = await db.prepare(query).all(...params);
+    const teams = await db.prepare(query).all();
     res.json(teams);
   } catch (err) {
     console.error('Error fetching teams:', err);
