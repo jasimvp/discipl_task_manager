@@ -363,8 +363,8 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
     const cleanEmail = email.toLowerCase().trim();
     const isLead = req.user.role === 'team_lead';
 
-    // Both Founders and Team Leads can add members to ANY department!
-    const targetRole = isLead ? (role === 'founder' ? 'employee' : (role || 'employee')) : (role || 'employee');
+    // Both Founders and Team Leads can add members with their chosen role and department!
+    const targetRole = role || 'employee';
     const targetDept = department || (isLead ? (req.user.department || 'Engineering & Tech') : 'Engineering & Tech');
     let finalTeamId = team_id ? Number(team_id) : null;
     if (!finalTeamId && targetDept) {

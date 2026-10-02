@@ -112,7 +112,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password: password.trim(),
-        role: isLead ? 'employee' : role,
+        role: role,
         department: department,
         team_id: matchingTeam ? matchingTeam.id : undefined,
         title: title.trim() || defaultTitle,
@@ -364,22 +364,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Workspace Role
                   </label>
-                  {isLead ? (
-                    <div className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                      <span>💼 Employee</span>
-                      <span className="text-[10px] text-slate-400 font-normal">(Team member)</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
-                    >
-                      <option value="employee">💼 Employee</option>
-                      <option value="team_lead">🛡️ Team Lead</option>
-                      <option value="founder">👑 Co-Founder</option>
-                    </select>
-                  )}
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
+                  >
+                    <option value="employee">💼 Employee</option>
+                    <option value="team_lead">🛡️ Team Lead</option>
+                    <option value="founder">👑 Co-Founder</option>
+                  </select>
                 </div>
 
                 <div>
