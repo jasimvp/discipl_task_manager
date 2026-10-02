@@ -15,7 +15,7 @@ import {
 import UserAvatar from './UserAvatar';
 
 export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser, onOpenAddEmployee }) {
-  const { user, availableUsers } = useAuth();
+  const { user, availableUsers, socket } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -31,7 +31,17 @@ export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser,
       }
     }
     loadStats();
-  }, [user]);
+
+    if (socket) {
+      const handleLiveReload = () => loadStats();
+      socket.on('user_added', handleLiveReload);
+      socket.on('access_approved', handleLiveReload);
+      return () => {
+        socket.off('user_added', handleLiveReload);
+        socket.off('access_approved', handleLiveReload);
+      };
+    }
+  }, [user, availableUsers, socket]);
 
   const isFounder = user?.role === 'founder';
   const isLead = user?.role === 'team_lead';
@@ -103,7 +113,13 @@ export default function TeamWorkloadView({ onOpenCreateTask, onOpenChatWithUser,
                         <h3 className="font-bold text-slate-900 dark:text-white text-sm">{emp.name}</h3>
                         {isMe && <span className="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">You</span>}
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{emp.title || 'Team Member'}</p>
+                      {emp.email && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[170px] sm:max-w-[210px]">{emp.email}</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">{emp.title || 'Team Member'}</p>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500">{emp.department || emp.team_name || 'General'}</p>
                     </div>
                   </div>

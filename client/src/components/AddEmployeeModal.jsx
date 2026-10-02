@@ -30,7 +30,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
   const [activeTab, setActiveTab] = useState('invite'); // 'invite' | 'unassigned' | 'pending' | 'preapproved'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('Welcome@2026');
   const [role, setRole] = useState('employee');
   const [department, setDepartment] = useState('Engineering & Tech');
   const [title, setTitle] = useState('');
@@ -38,6 +38,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [addedUserDetails, setAddedUserDetails] = useState(null);
 
   // Pending users, preapproved invites, unassigned, teams
   const [pendingUsers, setPendingUsers] = useState([]);
@@ -76,12 +77,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
     if (isOpen) {
       setName('');
       setEmail('');
-      setPassword('');
+      setPassword('Welcome@2026');
       setRole('employee');
       setDepartment(user?.department || 'Engineering & Tech');
       setTitle('');
       setError('');
       setSuccessMessage('');
+      setAddedUserDetails(null);
       setActiveTab('invite');
       loadData();
     }
@@ -100,6 +102,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
       setLoading(true);
       setError('');
       setSuccessMessage('');
+      setAddedUserDetails(null);
       const defaultTitle = role === 'founder' 
         ? 'Co-Founder' 
         : role === 'team_lead' 
@@ -111,7 +114,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
       const res = await api.addEmployee({
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        password: password.trim(),
+        password: password.trim() || 'Welcome@2026',
         role: role,
         department: department,
         team_id: matchingTeam ? matchingTeam.id : undefined,
@@ -119,9 +122,16 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
       });
 
       setSuccessMessage(res.message);
+      setAddedUserDetails({
+        name: res.user?.name || name.trim() || email.split('@')[0],
+        email: res.user?.email || res.email || email.trim().toLowerCase(),
+        role: res.user?.role || role,
+        department: res.user?.department || department,
+        password: password.trim() || res.temporaryPassword || 'Welcome@2026'
+      });
       setName('');
       setEmail('');
-      setPassword('');
+      setPassword('Welcome@2026');
       setTitle('');
       loadData();
       if (onUserAdded && res.user) onUserAdded(res.user);
@@ -290,7 +300,47 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
             </div>
           )}
 
-          {successMessage && (
+          {addedUserDetails && (
+            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200 text-xs space-y-2.5">
+              <div className="flex items-center gap-2 font-bold text-sm text-emerald-800 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Employee Account Created & Activated!</span>
+              </div>
+              <div className="bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-xl space-y-2 text-slate-700 dark:text-slate-300 text-xs border border-emerald-100 dark:border-emerald-900/40 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-500">Employee Name:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{addedUserDetails.name}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-500">Employee Email ID:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs">{addedUserDetails.email}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-500">Workspace Role:</span>
+                  <span className="font-bold text-purple-600 dark:text-purple-400">
+                    {addedUserDetails.role === 'founder' ? '👑 Co-Founder' : addedUserDetails.role === 'team_lead' ? '🛡️ Team Lead' : '💼 Employee'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-500">Department:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{addedUserDetails.department}</span>
+                </div>
+                {addedUserDetails.password && (
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <span className="font-semibold text-slate-500">Login Password:</span>
+                    <span className="font-mono font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                      {addedUserDetails.password}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                The employee can log in immediately using the email and password above.
+              </p>
+            </div>
+          )}
+
+          {successMessage && !addedUserDetails && (
             <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-xs flex items-start gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
               <div className="flex-1 font-medium">{successMessage}</div>
@@ -342,20 +392,20 @@ export default function AddEmployeeModal({ isOpen, onClose, onUserAdded }) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Initial Password (Optional - for instant activation)
+                  Initial Login Password *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="password"
-                    placeholder="Provide a password for instant login"
+                    placeholder="Welcome@2026"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:border-purple-500 outline-hidden"
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                  If left blank, the email is pre-authorized so the employee can sign up on their own without waiting for approvals.
+                  The employee will use this password and email to log in. Default is Welcome@2026.
                 </p>
               </div>
 

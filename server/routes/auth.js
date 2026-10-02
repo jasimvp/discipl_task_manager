@@ -380,18 +380,24 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
     const existingUser = await db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail);
 
     if (existingUser) {
-      if (existingUser.status === 'approved') {
-        // If user has no team, link them into the target department/team
-        if (!existingUser.team_id) {
-          await db.prepare('UPDATE users SET team_id = ?, department = ? WHERE id = ?').run(finalTeamId, targetDept, existingUser.id);
-          const updated = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(existingUser.id);
-          if (req.io) req.io.emit('user_added', updated);
-          return res.json({ message: `${existingUser.name} has been added to ${targetDept}!`, user: updated, linkedExisting: true });
-        }
-        return res.status(400).json({ error: `User with email "${cleanEmail}" is already an active member of Discipl.` });
+      // User already exists in Discipl! Update their role, department, title, and team_id directly
+      const newRole = role || existingUser.role;
+      const newDept = department || existingUser.department || 'Engineering & Tech';
+      let updateTeamId = finalTeamId;
+      if (!updateTeamId && newDept) {
+        const t = await db.prepare('SELECT id FROM teams WHERE name = ?').get(newDept);
+        if (t) updateTeamId = t.id;
       }
+      
+      let passUpdate = '';
+      const updateParams = [newRole, newDept, targetTitle, updateTeamId];
+      if (password && password.trim()) {
+        const hashedPassword = bcrypt.hashSync(password.trim(), 10);
+        passUpdate = ', password = ?';
+        updateParams.push(hashedPassword);
+      }
+      updateParams.push(existingUser.id);
 
-      // User is currently pending - Link and approve them immediately!
       await db.prepare(`
         UPDATE users
         SET status = 'approved',
@@ -399,13 +405,14 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
             department = ?,
             title = ?,
             team_id = COALESCE(?, team_id)
+            ${passUpdate}
         WHERE id = ?
-      `).run(targetRole, targetDept, targetTitle, finalTeamId, existingUser.id);
+      `).run(...updateParams);
 
       try {
         await db.prepare(`
           INSERT INTO notifications (user_id, title, message, type)
-          VALUES (?, 'Discipl Workspace Linked', 'You have been linked and approved for the Discipl workspace!', 'access_approved')
+          VALUES (?, 'Discipl Workspace Updated', 'Your profile and team assignment have been updated!', 'access_approved')
         `).run(existingUser.id);
       } catch (e) {}
 
@@ -417,57 +424,38 @@ router.post(['/invite-user', '/add-employee'], authMiddleware, requireRoles('fou
       }
 
       return res.json({
-        message: `Employee ${existingUser.name} (${cleanEmail}) has been linked and approved for ${targetDept}!`,
+        message: `Employee ${existingUser.name} (${cleanEmail}) has been updated and assigned as ${targetRole === 'founder' ? 'Co-Founder' : targetRole === 'team_lead' ? 'Team Lead' : 'Employee'} in ${targetDept}!`,
         user: updatedUser,
+        email: cleanEmail,
         linkedExisting: true
       });
     }
 
-    // If password provided, directly create approved account!
-    if (password && password.trim()) {
-      const hashedPassword = bcrypt.hashSync(password.trim(), 10);
-      const memberName = name && name.trim() ? name.trim() : cleanEmail.split('@')[0];
-      const avatar = generateStaticAvatar(memberName, targetRole);
+    // New User: Always create and activate account immediately!
+    const effectivePassword = (password && password.trim()) ? password.trim() : 'Welcome@2026';
+    const hashedPassword = bcrypt.hashSync(effectivePassword, 10);
+    const memberName = name && name.trim() ? name.trim() : cleanEmail.split('@')[0];
+    const avatar = generateStaticAvatar(memberName, targetRole);
 
-      const result = await db.prepare(`
-        INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved')
-      `).run(memberName, cleanEmail, hashedPassword, targetRole, targetTitle, targetDept, finalTeamId, avatar);
+    const result = await db.prepare(`
+      INSERT INTO users (name, email, password, role, title, department, team_id, avatar, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved')
+    `).run(memberName, cleanEmail, hashedPassword, targetRole, targetTitle, targetDept, finalTeamId, avatar);
 
-      const newUser = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(result.lastInsertRowid);
-      if (req.io) {
-        req.io.emit('user_added', newUser);
-      }
-      return res.status(201).json({
-        message: `Member ${newUser.name} (${cleanEmail}) has been created and added to ${targetDept}!`,
-        user: newUser,
-        linkedExisting: false
-      });
+    const newUser = await db.prepare('SELECT id, name, email, role, title, department, team_id, avatar, status FROM users WHERE id = ?').get(result.lastInsertRowid);
+    if (req.io) {
+      req.io.emit('user_added', newUser);
     }
 
-    // Pre-authorize invite
-    const existingInvite = await db.prepare('SELECT id FROM company_invites WHERE email = ?').get(cleanEmail);
-    if (existingInvite) {
-      await db.prepare(`
-        UPDATE company_invites
-        SET role = ?, department = ?, title = ?, created_by = ?
-        WHERE id = ?
-      `).run(targetRole, targetDept, targetTitle, req.user.id, existingInvite.id);
-    } else {
-      await db.prepare(`
-        INSERT INTO company_invites (email, role, department, title, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(cleanEmail, targetRole, targetDept, targetTitle, req.user.id);
-    }
+    try {
+      await db.prepare('DELETE FROM company_invites WHERE email = ?').run(cleanEmail);
+    } catch (e) {}
 
-    res.status(201).json({
-      message: `Email "${cleanEmail}" is now pre-authorized for ${targetDept}! As soon as the employee registers, they will be automatically placed in ${targetDept}.`,
-      invite: {
-        email: cleanEmail,
-        role: targetRole,
-        department: targetDept,
-        title: targetTitle
-      },
+    return res.status(201).json({
+      message: `Employee ${newUser.name} (${cleanEmail}) has been successfully created and added to ${targetDept} as ${targetRole === 'founder' ? 'Co-Founder' : targetRole === 'team_lead' ? 'Team Lead' : 'Employee'}!`,
+      user: newUser,
+      email: cleanEmail,
+      temporaryPassword: effectivePassword,
       linkedExisting: false
     });
   } catch (err) {

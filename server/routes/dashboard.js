@@ -49,7 +49,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
     }
 
     const employeeStats = await db.prepare(`
-      SELECT u.id, u.name, u.avatar, u.role, u.title, u.department,
+      SELECT u.id, u.name, u.email, u.avatar, u.role, u.title, u.department,
              t.name as team_name,
              COUNT(tk.id) as total_tasks,
              SUM(CASE WHEN tk.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
@@ -61,7 +61,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
       LEFT JOIN teams t ON u.team_id = t.id
       LEFT JOIN tasks tk ON tk.assigned_to = u.id
       ${empWhere}
-      GROUP BY u.id, t.name
+      GROUP BY u.id, u.name, u.email, u.avatar, u.role, u.title, u.department, t.name
       ORDER BY total_tasks DESC, u.name ASC
     `).all(...empParams);
 
