@@ -13,6 +13,7 @@ import AddEmployeeModal from './components/AddEmployeeModal';
 import TaskModal from './components/TaskModal';
 import TaskDetailsModal from './components/TaskDetailsModal';
 import CommandPalette from './components/CommandPalette';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function MainApp() {
   const { user, loading, socket } = useAuth();
@@ -130,14 +131,20 @@ function MainApp() {
       />
 
       {/* Task Details & Reassignment Modal (Concurrency locking enabled) */}
-      <TaskDetailsModal
-        taskId={selectedTaskId}
-        isOpen={!!selectedTaskId}
+      <ErrorBoundary
+        title="Unable to display task details"
         onClose={() => setSelectedTaskId(null)}
-        onTaskUpdated={() => {
-          // Socket event triggers update
-        }}
-      />
+        onReset={() => setSelectedTaskId(null)}
+      >
+        <TaskDetailsModal
+          taskId={selectedTaskId}
+          isOpen={!!selectedTaskId}
+          onClose={() => setSelectedTaskId(null)}
+          onTaskUpdated={() => {
+            // Socket event triggers update
+          }}
+        />
+      </ErrorBoundary>
 
       {/* Command Palette (Ctrl + K Search) */}
       <CommandPalette

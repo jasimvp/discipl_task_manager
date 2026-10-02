@@ -24,7 +24,8 @@ import {
   GitMerge,
   ArrowRight,
   Layers,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
